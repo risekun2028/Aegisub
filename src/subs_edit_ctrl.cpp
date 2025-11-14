@@ -33,8 +33,6 @@
 #include "compat.h"
 #include "options.h"
 #include "include/aegisub/context.h"
-#include "include/aegisub/spellchecker.h"
-#include "thesaurus.h"
 #include "utils.h"
 
 #include <boost/algorithm/string/replace.hpp>
@@ -71,8 +69,6 @@ enum {
 
 SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, agi::Context* context)
 	: wxTextCtrl(parent, wxID_ANY, wxEmptyString, wxDefaultPosition, wsize, style | wxTE_MULTILINE)
-	, spellchecker(nullptr)
-	, thesaurus(nullptr)
 	, context(context)
 {
 	SetStyles();
