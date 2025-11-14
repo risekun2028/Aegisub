@@ -231,7 +231,8 @@ SubsEditBox::SubsEditBox(wxWindow *parent, agi::Context *context)
 		edit_ctrl_tc->SetInitialSize(wxSize(400, 100));
 		main_sizer->Add(edit_ctrl_tc, wxSizerFlags(1).Expand().Border(wxLEFT | wxRIGHT | wxBOTTOM, 3));
 		edit_ctrl_tc->Bind(wxEVT_TEXT, &SubsEditBox::OnChangeTc, this);
-		context->textSelectionController->SetControl(edit_ctrl_tc);
+		// TextSelectionController is STC-specific; native controls don't use it
+		context->textSelectionController->SetControl(nullptr);
 		edit_ctrl_tc->SetFocus();
 	}
 #else
@@ -240,7 +241,8 @@ SubsEditBox::SubsEditBox(wxWindow *parent, agi::Context *context)
 	edit_ctrl_tc->SetInitialSize(wxSize(400, 100));
 	main_sizer->Add(edit_ctrl_tc, wxSizerFlags(1).Expand().Border(wxLEFT | wxRIGHT | wxBOTTOM, 3));
 	edit_ctrl_tc->Bind(wxEVT_TEXT, &SubsEditBox::OnChangeTc, this);
-	context->textSelectionController->SetControl(edit_ctrl_tc);
+	// TextSelectionController is STC-specific; native controls don't use it
+	context->textSelectionController->SetControl(nullptr);
 	edit_ctrl_tc->SetFocus();
 #endif
 
