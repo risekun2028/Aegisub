@@ -32,9 +32,7 @@
 #include <vector>
 #include <wx/textctrl.h>
 
-class Thesaurus;
 namespace agi {
-	class SpellChecker;
 	struct Context;
 }
 
@@ -42,12 +40,6 @@ namespace agi {
 /// @brief Native wxTextCtrl-based subtitle editor
 /// Better platform-specific support: keyboard shortcuts, IME, RTL languages
 class SubsTextEditCtrl final : public wxTextCtrl {
-	/// Backend spellchecker to use
-	std::unique_ptr<agi::SpellChecker> spellchecker;
-
-	/// Backend thesaurus to use
-	std::unique_ptr<Thesaurus> thesaurus;
-
 	/// Project context, for splitting lines
 	agi::Context *context;
 
