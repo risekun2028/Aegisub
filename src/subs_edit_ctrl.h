@@ -30,18 +30,18 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <wx/stc/stc.h>
+#include <wx/textctrl.h>
 
 class Thesaurus;
 namespace agi {
 	class SpellChecker;
 	struct Context;
-	namespace ass { struct DialogueToken; }
 }
 
 /// @class SubsTextEditCtrl
-/// @brief A Scintilla control with spell checking and syntax highlighting
-class SubsTextEditCtrl final : public wxStyledTextCtrl {
+/// @brief Native wxTextCtrl-based subtitle editor
+/// Better platform-specific support: keyboard shortcuts, IME, RTL languages
+class SubsTextEditCtrl final : public wxTextCtrl {
 	/// Backend spellchecker to use
 	std::unique_ptr<agi::SpellChecker> spellchecker;
 
@@ -63,39 +63,10 @@ class SubsTextEditCtrl final : public wxStyledTextCtrl {
 	/// Thesaurus suggestions for the last right-clicked word
 	std::vector<std::string> thesSugs;
 
-	/// Text of the currently shown calltip, to avoid flickering from
-	/// pointlessly reshowing the current tip
-	std::string calltip_text;
-
-	/// Position of the currently show calltip
-	size_t calltip_position = 0;
-
-	/// Cursor position which the current calltip is for
-	int cursor_pos;
-
-	/// The last seen line text, used to avoid reparsing the line for syntax
-	/// highlighting when possible
-	std::string line_text;
-
-	/// Tokenized version of line_text
-	std::vector<agi::ass::DialogueToken> tokenized_line;
-
 	void OnContextMenu(wxContextMenuEvent &);
-	void OnDoubleClick(wxStyledTextEvent&);
-	void OnUseSuggestion(wxCommandEvent &event);
-	void OnSetDicLanguage(wxCommandEvent &event);
-	void OnSetThesLanguage(wxCommandEvent &event);
-	void OnLoseFocus(wxFocusEvent &event);
 	void OnKeyDown(wxKeyEvent &event);
 
-	void SetSyntaxStyle(int id, wxFont &font, std::string const& name, wxColor const& default_background);
-	void Subscribe(std::string const& name);
-
-	void StyleSpellCheck();
-	void UpdateCallTip();
 	void SetStyles();
-
-	void UpdateStyle();
 
 	/// Add the thesaurus suggestions to a menu
 	void AddThesaurusEntries(wxMenu &menu);
@@ -117,6 +88,4 @@ public:
 	void Paste() override;
 
 	std::pair<int, int> GetBoundsOfWordAtPosition(int pos);
-
-	DECLARE_EVENT_TABLE()
 };
