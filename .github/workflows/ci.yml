@@ -43,6 +43,7 @@ jobs:
               -Davisynth=enabled
               -Dbestsource=enabled
               -Dvapoursynth=enabled
+              -Dwxstc=enabled
           - name: Windows MSVC Release (wx master)
             os: windows-latest
             msvc: true
@@ -65,6 +66,7 @@ jobs:
               -Davisynth=enabled
               -Dbestsource=enabled
               -Dvapoursynth=enabled
+              -Dwxstc=enabled
               -Dwx_version='3.3.1'
           #- {
           #  name: Windows MinGW,
@@ -75,13 +77,13 @@ jobs:
             name: Ubuntu Debug,
             os: ubuntu-22.04,
             buildtype: debugoptimized,
-            args: ''
+            args: '-Dwxstc=enabled'
           }
           - {
             name: Ubuntu Release,
             os: ubuntu-22.04,
             buildtype: release,
-            args: ''
+            args: '-Dwxstc=enabled'
           }
           - name: Ubuntu AppImage
             os: ubuntu-22.04
@@ -97,11 +99,12 @@ jobs:
               -Davisynth=enabled
               -Dbestsource=enabled
               -Dvapoursynth=enabled
+              -Dwxstc=enabled
           - {
             name: macOS Release,
             os: macos-13,
             buildtype: release,
-            args: -Ddefault_library=static -Dbuild_osx_bundle=true -Dlocal_boost=true -Dvapoursynth=enabled --force-fallback-for=ffms2
+            args: -Ddefault_library=static -Dbuild_osx_bundle=true -Dlocal_boost=true -Dvapoursynth=enabled -Dwxstc=enabled --force-fallback-for=ffms2
           }
 
     steps:
