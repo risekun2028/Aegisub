@@ -417,6 +417,12 @@ if not get_option('csri').disabled() and host_machine.system() == 'windows'
     deps += csri_sp.get_variable('csri_dep')
 endif
 
+if not get_option('wxstc').disabled()
+    conf.set('WITH_WXSTC', 1)
+elif get_option('wxstc').enabled()
+    error('wxstc enabled but wxWidgets stc module not available')
+endif
+
 acconf = configure_file(output: 'acconf.h', configuration: conf)
 
 subdir('automation')
