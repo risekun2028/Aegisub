@@ -30,16 +30,26 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <wx/textctrl.h>
+#include <wx/wx.h>
+#include <wx/stc/stc.h>
 
+class Thesaurus;
 namespace agi {
+	class SpellChecker;
 	struct Context;
+	namespace ass { struct DialogueToken; }
 }
 
 /// @class SubsTextEditCtrl
-/// @brief Native wxTextCtrl-based subtitle editor
-/// Better platform-specific support: keyboard shortcuts, IME, RTL languages
-class SubsTextEditCtrl final : public wxTextCtrl {
+/// @brief wxStyledTextCtrl-based subtitle editor (Scintilla)
+/// Provides colored syntax highlighting and all STC features
+class SubsTextEditCtrl final : public wxStyledTextCtrl {
+	/// Backend spellchecker to use
+	std::unique_ptr<agi::SpellChecker> spellchecker;
+
+	/// Backend thesaurus to use
+	std::unique_ptr<Thesaurus> thesaurus;
+
 	/// Project context, for splitting lines
 	agi::Context *context;
 
@@ -55,10 +65,32 @@ class SubsTextEditCtrl final : public wxTextCtrl {
 	/// Thesaurus suggestions for the last right-clicked word
 	std::vector<std::string> thesSugs;
 
+	/// Current font size for zoom functionality
+	int zoom_level = 0;
+
+	/// The last seen line text, used to avoid reparsing the line for syntax
+	/// highlighting when possible
+	std::string line_text;
+
+	/// Tokenized line for syntax highlighting
+	std::vector<agi::ass::DialogueToken> tokenized_line;
+
+	/// Current cursor position for call tips
+	long cursor_pos = -1;
+
 	void OnContextMenu(wxContextMenuEvent &);
 	void OnKeyDown(wxKeyEvent &event);
+	void OnMouseWheel(wxMouseEvent &event);
+	void OnSetDicLanguage(wxCommandEvent &event);
+	void OnSetThesLanguage(wxCommandEvent &event);
 
 	void SetStyles();
+
+	/// Apply syntax highlighting with colored tags
+	void UpdateStyle();
+
+	/// Update call tips for tag documentation
+	void UpdateCallTip();
 
 	/// Add the thesaurus suggestions to a menu
 	void AddThesaurusEntries(wxMenu &menu);
@@ -71,6 +103,12 @@ class SubsTextEditCtrl final : public wxTextCtrl {
 	/// @param curLang Currently selected language
 	/// @param lang Full list of languages
 	wxMenu *GetLanguagesMenu(int base_id, wxString const& curLang, wxArrayString const& langs);
+
+	/// Update font size based on zoom level
+	void ApplyZoom();
+
+	/// Apply syntax highlighting with colored tags
+	void UpdateStyle();
 
 public:
 	SubsTextEditCtrl(wxWindow* parent, wxSize size, long style, agi::Context *context);
