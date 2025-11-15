@@ -91,6 +91,7 @@ enum {
 	EDIT_MENU_DIC_LANGS,
 	EDIT_MENU_THES_LANGUAGE = EDIT_MENU_DIC_LANGUAGE + LANGS_MAX,
 	EDIT_MENU_THES_LANGS
+    ,EDIT_MENU_RTL = (wxID_HIGHEST + 1) + 7000
 };
 
 SubsStyledTextEditCtrl::SubsStyledTextEditCtrl(wxWindow* parent, wxSize wsize, long style, agi::Context *context)
@@ -180,6 +181,9 @@ SubsStyledTextEditCtrl::SubsStyledTextEditCtrl(wxWindow* parent, wxSize wsize, l
 		UpdateStyle();
 		SetFocus();
 	}, EDIT_MENU_REMOVE_FROM_DICT);
+
+    // Bind RTL toggle menu command (used by context menu)
+    Bind(wxEVT_MENU, &SubsStyledTextEditCtrl::OnToggleRTL, this, EDIT_MENU_RTL);
 }
 
 SubsStyledTextEditCtrl::~SubsStyledTextEditCtrl() {
@@ -424,6 +428,10 @@ void SubsStyledTextEditCtrl::OnContextMenu(wxContextMenuEvent &event) {
 		menu.Append(EDIT_MENU_SPLIT_VIDEO, split_video->StrMenu(context))->Enable(split_video->Validate(context));
 	}
 
+	// Add RTL toggle fallback
+	menu.AppendSeparator();
+	menu.Append(EDIT_MENU_RTL, _("Right to left Reading order"));
+
 	PopupMenu(&menu);
 }
 
@@ -585,6 +593,15 @@ void SubsStyledTextEditCtrl::OnSetThesLanguage(wxCommandEvent &event) {
 	OPT_SET("Tool/Thesaurus/Language")->SetString(lang);
 
 	UpdateStyle();
+}
+
+void SubsStyledTextEditCtrl::OnToggleRTL(wxCommandEvent &event) {
+	auto dir = GetLayoutDirection();
+	if (dir == wxLayout_RightToLeft)
+		SetLayoutDirection(wxLayout_LeftToRight);
+	else
+		SetLayoutDirection(wxLayout_RightToLeft);
+	Refresh();
 }
 
 std::pair<int, int> SubsStyledTextEditCtrl::GetBoundsOfWordAtPosition(int pos) {
