@@ -30,7 +30,8 @@ class TextSelectionController {
 	long staged_selection_end = 0;
 	bool has_staged_selection = false;
 
-	// Generic pointer to the current control (either wxSTC or wxTextCtrl)
+	// Pointers to the current controls (either wxStyledTextCtrl or wxTextCtrl)
+	wxStyledTextCtrl *ctrl_stc = nullptr;
 	wxTextCtrl *ctrl_te = nullptr;
 #ifdef WITH_WXSTC
 	bool use_stc = true;
