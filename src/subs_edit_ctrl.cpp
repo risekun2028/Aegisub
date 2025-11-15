@@ -82,96 +82,124 @@ SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, a
 	, thesaurus(std::make_unique<Thesaurus>())
 	, context(context)
 {
+	osx::ime::inject(this);
+
+	// Set properties
 	SetWrapMode(wxSTC_WRAP_WORD);
 	SetMarginWidth(1, 0);
 	UsePopUp(false);
 	SetStyles();
 
+	// Set hotkeys
+	CmdKeyClear(wxSTC_KEY_RETURN, wxSTC_KEYMOD_CTRL);
+	CmdKeyClear(wxSTC_KEY_RETURN, wxSTC_KEYMOD_SHIFT);
+	CmdKeyClear(wxSTC_KEY_RETURN, wxSTC_KEYMOD_NORM);
+	CmdKeyClear(wxSTC_KEY_TAB, wxSTC_KEYMOD_NORM);
+	CmdKeyClear(wxSTC_KEY_TAB, wxSTC_KEYMOD_SHIFT);
+	CmdKeyClear('D', wxSTC_KEYMOD_CTRL);
+	CmdKeyClear('L', wxSTC_KEYMOD_CTRL);
+	CmdKeyClear('L', wxSTC_KEYMOD_CTRL | wxSTC_KEYMOD_SHIFT);
+	CmdKeyClear('T', wxSTC_KEYMOD_CTRL);
+	CmdKeyClear('T', wxSTC_KEYMOD_CTRL | wxSTC_KEYMOD_SHIFT);
+	CmdKeyClear('U', wxSTC_KEYMOD_CTRL);
+
 	using std::bind;
 
 	Bind(wxEVT_CHAR_HOOK, &SubsTextEditCtrl::OnKeyDown, this);
-	Bind(wxEVT_MOUSEWHEEL, &SubsTextEditCtrl::OnMouseWheel, this);
-	Bind(wxEVT_TEXT, [this](wxCommandEvent&) { UpdateStyle(); });  // Apply coloring on text change
 
 	Bind(wxEVT_MENU, bind(&SubsTextEditCtrl::Cut, this), EDIT_MENU_CUT);
 	Bind(wxEVT_MENU, bind(&SubsTextEditCtrl::Copy, this), EDIT_MENU_COPY);
 	Bind(wxEVT_MENU, bind(&SubsTextEditCtrl::Paste, this), EDIT_MENU_PASTE);
 	Bind(wxEVT_MENU, bind(&SubsTextEditCtrl::SelectAll, this), EDIT_MENU_SELECT_ALL);
 
-	// Bind spell checker and thesaurus menu events
-	Bind(wxEVT_MENU, [this](wxCommandEvent &event) {
-		std::string suggestion;
-		int sugIdx = event.GetId() - EDIT_MENU_THESAURUS_SUGS;
-		if (sugIdx >= 0)
-			suggestion = thesSugs[sugIdx];
-		else
-			suggestion = sugs[event.GetId() - EDIT_MENU_SUGGESTIONS];
-
-		long sel_start = currentWordPos.first;
-		long sel_end = currentWordPos.first + currentWordPos.second;
-		wxString text = GetValue();
-		text.replace(sel_start, sel_end - sel_start, to_wx(suggestion));
-		SetValue(text);
-		SetSelection(sel_start + suggestion.size(), sel_start + suggestion.size());
-	}, EDIT_MENU_SUGGESTION, EDIT_MENU_SUGGESTIONS + 1000);
-
-	Bind(wxEVT_MENU, &SubsTextEditCtrl::OnSetDicLanguage, this, EDIT_MENU_DIC_LANGS, EDIT_MENU_THES_LANGUAGE - 1);
-	Bind(wxEVT_MENU, &SubsTextEditCtrl::OnSetThesLanguage, this, EDIT_MENU_THES_LANGS, EDIT_MENU_THES_LANGS + LANGS_MAX);
-
-	Bind(wxEVT_MENU, [this](wxCommandEvent&) {
-		if (spellchecker) spellchecker->AddWord(currentWord);
-		SetFocus();
-	}, EDIT_MENU_ADD_TO_DICT);
-
-	Bind(wxEVT_MENU, [this](wxCommandEvent&) {
-		if (spellchecker) spellchecker->RemoveWord(currentWord);
-		SetFocus();
-	}, EDIT_MENU_REMOVE_FROM_DICT);
-
 	if (context) {
 		Bind(wxEVT_MENU, bind(&cmd::call, "edit/line/split/preserve", context), EDIT_MENU_SPLIT_PRESERVE);
 		Bind(wxEVT_MENU, bind(&cmd::call, "edit/line/split/estimate", context), EDIT_MENU_SPLIT_ESTIMATE);
 		Bind(wxEVT_MENU, bind(&cmd::call, "edit/line/split/video", context), EDIT_MENU_SPLIT_VIDEO);
-		Bind(wxEVT_CONTEXT_MENU, &SubsTextEditCtrl::OnContextMenu, this);
 	}
+
+	Bind(wxEVT_CONTEXT_MENU, &SubsTextEditCtrl::OnContextMenu, this);
+	Bind(wxEVT_IDLE, std::bind(&SubsTextEditCtrl::UpdateCallTip, this));
+	Bind(wxEVT_STC_DOUBLECLICK, &SubsTextEditCtrl::OnDoubleClick, this);
+	// **CRITICAL**: Bind wxEVT_STC_STYLENEEDED to trigger UpdateStyle() for Scintilla rendering
+	Bind(wxEVT_STC_STYLENEEDED, [=](wxStyledTextEvent&) {
+		{
+			std::string text = GetTextRaw().data();
+			if (text == line_text) return;
+			line_text = std::move(text);
+		}
+		UpdateStyle();
+	});
 
 	OPT_SUB("Subtitle/Edit Box/Font Face", &SubsTextEditCtrl::SetStyles, this);
 	OPT_SUB("Subtitle/Edit Box/Font Size", &SubsTextEditCtrl::SetStyles, this);
+	Subscribe("Normal");
+	Subscribe("Comment");
+	Subscribe("Drawing Command");
+	Subscribe("Drawing X");
+	Subscribe("Drawing Y");
+	OPT_SUB("Colour/Subtitle/Syntax/Underline/Drawing Endpoint", &SubsTextEditCtrl::SetStyles, this);
+	Subscribe("Brackets");
+	Subscribe("Slashes");
+	Subscribe("Tags");
+	Subscribe("Error");
+	Subscribe("Parameters");
+	Subscribe("Line Break");
+	Subscribe("Karaoke Template");
+	Subscribe("Karaoke Variable");
+
 	OPT_SUB("Colour/Subtitle/Background", &SubsTextEditCtrl::SetStyles, this);
-	OPT_SUB("Colour/Subtitle/Syntax/Normal", &SubsTextEditCtrl::SetStyles, this);
+	OPT_SUB("Subtitle/Highlight/Syntax", &SubsTextEditCtrl::UpdateStyle, this);
+	OPT_SUB("App/Call Tips", &SubsTextEditCtrl::UpdateCallTip, this);
+
+	Bind(wxEVT_MENU, [=](wxCommandEvent&) {
+		if (spellchecker) spellchecker->AddWord(currentWord);
+		UpdateStyle();
+		SetFocus();
+	}, EDIT_MENU_ADD_TO_DICT);
+
+	Bind(wxEVT_MENU, [=](wxCommandEvent&) {
+		if (spellchecker) spellchecker->RemoveWord(currentWord);
+		UpdateStyle();
+		SetFocus();
+	}, EDIT_MENU_REMOVE_FROM_DICT);
 }
 
 SubsTextEditCtrl::~SubsTextEditCtrl() {
 }
 
+void SubsTextEditCtrl::Subscribe(std::string const& name) {
+	OPT_SUB("Colour/Subtitle/Syntax/" + name, &SubsTextEditCtrl::SetStyles, this);
+	OPT_SUB("Colour/Subtitle/Syntax/Background/" + name, &SubsTextEditCtrl::SetStyles, this);
+	OPT_SUB("Colour/Subtitle/Syntax/Bold/" + name, &SubsTextEditCtrl::SetStyles, this);
+}
+
 void SubsTextEditCtrl::OnKeyDown(wxKeyEvent& event) {
-	// Handle Shift+Return for soft line breaks
-	if (event.GetKeyCode() == WXK_RETURN && event.GetModifiers() == wxMOD_SHIFT) {
-		InsertText(GetCurrentPos(), "\\N");
+	if (osx::ime::process_key_event(this, event)) return;
+	event.Skip();
+
+	// Allow Ctrl+Shift+Right/Left to pass through to OS for RTL text direction toggle
+	// This is critical for Arabic and Hebrew text support on Linux/Ubuntu
+	if ((event.GetKeyCode() == WXK_LEFT || event.GetKeyCode() == WXK_RIGHT) && 
+	    event.GetModifiers() == (wxMOD_CONTROL | wxMOD_SHIFT)) {
+		event.Skip();  // Let OS handle RTL toggle
 		return;
 	}
 
-	// For all other keys, let the STC and OS handle them
-	event.Skip();
-}
+	// Workaround for wxSTC eating tabs.
+	if (event.GetKeyCode() == WXK_TAB)
+		Navigate(event.ShiftDown() ? wxNavigationKeyEvent::IsBackward : wxNavigationKeyEvent::IsForward);
+	else if (event.GetKeyCode() == WXK_RETURN && event.GetModifiers() == wxMOD_SHIFT) {
+		auto sel_start = GetSelectionStart(), sel_end = GetSelectionEnd();
+		wxCharBuffer old = GetTextRaw();
+		std::string data(old.data(), sel_start);
+		data.append(OPT_GET("Subtitle/Edit Box/Soft Line Break")->GetBool() ? "\\n" : "\\N");
+		data.append(old.data() + sel_end, old.length() - sel_end);
+		SetTextRaw(data.c_str());
 
-void SubsTextEditCtrl::OnMouseWheel(wxMouseEvent& event) {
-	// Handle Ctrl+Wheel for zoom
-	if (event.GetModifiers() == wxMOD_CONTROL) {
-		if (event.GetWheelRotation() > 0) {
-			// Zoom in
-			zoom_level++;
-		} else if (event.GetWheelRotation() < 0) {
-			// Zoom out
-			zoom_level--;
-		}
-		zoom_level = std::max(-10, std::min(10, zoom_level));
-		ApplyZoom();
-		return;  // We handled it
+		SetSelection(sel_start + 2, sel_start + 2);
+		event.Skip(false);
 	}
-
-	// Let the control handle normal scrolling
-	event.Skip();
 }
 
 void SubsTextEditCtrl::SetStyles() {
@@ -252,17 +280,6 @@ void SubsTextEditCtrl::SetStyles() {
 	// IME pending text indicator
 	IndicatorSetStyle(1, wxSTC_INDIC_PLAIN);
 	IndicatorSetUnder(1, true);
-
-	ApplyZoom();
-}
-
-void SubsTextEditCtrl::ApplyZoom() {
-	wxFont font = GetFont();
-	int base_size = OPT_GET("Subtitle/Edit Box/Font Size")->GetInt();
-	int new_size = base_size + zoom_level;
-	new_size = std::max(3, std::min(50, new_size));  // Clamp between 3 and 50 points
-	font.SetPointSize(new_size);
-	SetFont(font);
 }
 
 void SubsTextEditCtrl::UpdateStyle() {
@@ -326,29 +343,33 @@ void SubsTextEditCtrl::UpdateCallTip() {
 	// This is simplified - full implementation would show tag parameter hints
 }
 
-void SubsTextEditCtrl::OnContextMenu(wxContextMenuEvent& event) {
-	// KEY FEATURE: Shift+Right-Click shows native OS context menu
-	// This gives access to OS-specific features like RTL text display on Ubuntu
-	if (wxGetKeyState(WXK_SHIFT)) {
-		event.Skip();  // Show native context menu
-		return;
+void SubsTextEditCtrl::OnDoubleClick(wxStyledTextEvent &evt) {
+	int pos = evt.GetPosition();
+	if (pos == -1 && !tokenized_line.empty()) {
+		auto tok = tokenized_line.back();
+		SetSelection(line_text.size() - tok.length, line_text.size());
 	}
+	else {
+		auto bounds = GetBoundsOfWordAtPosition(evt.GetPosition());
+		if (bounds.second != 0)
+			SetSelection(bounds.first, bounds.first + bounds.second);
+		else
+			evt.Skip();
+	}
+}
 
+void SubsTextEditCtrl::OnContextMenu(wxContextMenuEvent& event) {
 	wxPoint pos = event.GetPosition();
 	int activePos;
 	if (pos == wxDefaultPosition)
-		activePos = GetInsertionPoint();
+		activePos = GetCurrentPos();
 	else
 		activePos = PositionFromPoint(ScreenToClient(pos));
 
 	currentWordPos = GetBoundsOfWordAtPosition(activePos);
-	currentWord = std::string(GetValue().utf8_str().data()) + "";
-	if (currentWordPos.first >= 0 && currentWordPos.first + currentWordPos.second <= (int)currentWord.length()) {
-		currentWord = currentWord.substr(currentWordPos.first, currentWordPos.second);
-	}
+	currentWord = line_text.substr(currentWordPos.first, currentWordPos.second);
 
 	wxMenu menu;
-	
 	if (spellchecker) {
 		AddSpellCheckerEntries(menu);
 
@@ -363,18 +384,18 @@ void SubsTextEditCtrl::OnContextMenu(wxContextMenuEvent& event) {
 	AddThesaurusEntries(menu);
 
 	// Standard actions
-	menu.Append(EDIT_MENU_CUT, _("Cu&t"))->Enable(!GetStringSelection().IsEmpty());
-	menu.Append(EDIT_MENU_COPY, _("&Copy"))->Enable(!GetStringSelection().IsEmpty());
-	menu.Append(EDIT_MENU_PASTE, _("&Paste"))->Enable(CanPaste());
+	menu.Append(EDIT_MENU_CUT,_("Cu&t"))->Enable(GetSelectionStart()-GetSelectionEnd() != 0);
+	menu.Append(EDIT_MENU_COPY,_("&Copy"))->Enable(GetSelectionStart()-GetSelectionEnd() != 0);
+	menu.Append(EDIT_MENU_PASTE,_("&Paste"))->Enable(CanPaste());
 	menu.AppendSeparator();
-	menu.Append(EDIT_MENU_SELECT_ALL, _("Select &All"));
+	menu.Append(EDIT_MENU_SELECT_ALL,_("Select &All"));
 
 	// Split
 	if (context) {
 		menu.AppendSeparator();
 		menu.Append(EDIT_MENU_SPLIT_PRESERVE, _("Split at cursor (preserve times)"));
 		menu.Append(EDIT_MENU_SPLIT_ESTIMATE, _("Split at cursor (estimate times)"));
-		cmd::Command* split_video = cmd::get("edit/line/split/video");
+		cmd::Command *split_video = cmd::get("edit/line/split/video");
 		menu.Append(EDIT_MENU_SPLIT_VIDEO, split_video->StrMenu(context))->Enable(split_video->Validate(context));
 	}
 
@@ -401,9 +422,31 @@ void SubsTextEditCtrl::Paste() {
 }
 
 void SubsTextEditCtrl::SetTextTo(std::string const& text) {
-	line_text.clear();  // Force reparsing on next UpdateStyle
-	SetValue(to_wx(text));
-	UpdateStyle();  // Apply syntax highlighting to newly set text
+	osx::ime::invalidate(this);
+	SetEvtHandlerEnabled(false);
+	Freeze();
+
+	auto insertion_point = GetInsertionPoint();
+	if (static_cast<size_t>(insertion_point) > line_text.size())
+		line_text = GetTextRaw().data();
+	auto old_pos = agi::CharacterCount(line_text.begin(), line_text.begin() + insertion_point, 0);
+	line_text.clear();
+
+	if (context) {
+		context->textSelectionController->SetSelection(0, 0);
+		SetTextRaw(text.c_str());
+		auto pos = agi::IndexOfCharacter(text, old_pos);
+		context->textSelectionController->SetSelection(pos, pos);
+	}
+	else {
+		SetSelection(0, 0);
+		SetTextRaw(text.c_str());
+		auto pos = agi::IndexOfCharacter(text, old_pos);
+		SetSelection(pos, pos);
+	}
+
+	SetEvtHandlerEnabled(true);
+	Thaw();
 }
 
 std::pair<int, int> SubsTextEditCtrl::GetBoundsOfWordAtPosition(int pos) {
