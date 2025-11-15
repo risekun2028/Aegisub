@@ -82,6 +82,7 @@ class SubsTextEditCtrl final : public wxStyledTextCtrl {
 	void OnDoubleClick(wxStyledTextEvent &evt);
 	void OnSetDicLanguage(wxCommandEvent &event);
 	void OnSetThesLanguage(wxCommandEvent &event);
+    void OnToggleRTL(wxCommandEvent &event);
 
 	void SetStyles();
 	void Subscribe(std::string const& name);
