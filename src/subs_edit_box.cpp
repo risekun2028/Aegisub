@@ -231,8 +231,9 @@ SubsEditBox::SubsEditBox(wxWindow *parent, agi::Context *context)
 		edit_ctrl_tc->SetInitialSize(wxSize(400, 100));
 		main_sizer->Add(edit_ctrl_tc, wxSizerFlags(1).Expand().Border(wxLEFT | wxRIGHT | wxBOTTOM, 3));
 		edit_ctrl_tc->Bind(wxEVT_TEXT, &SubsEditBox::OnChangeTc, this);
-		// TextSelectionController is STC-specific; native controls don't use it
-		context->textSelectionController->SetControl(nullptr);
+		// Bind the native wxTextCtrl to the TextSelectionController so selection
+		// coordinates are kept in sync (convert between UTF-8 and codepoints).
+		context->textSelectionController->SetControl(edit_ctrl_tc);
 		edit_ctrl_tc->SetFocus();
 	}
 #else
@@ -241,8 +242,7 @@ SubsEditBox::SubsEditBox(wxWindow *parent, agi::Context *context)
 	edit_ctrl_tc->SetInitialSize(wxSize(400, 100));
 	main_sizer->Add(edit_ctrl_tc, wxSizerFlags(1).Expand().Border(wxLEFT | wxRIGHT | wxBOTTOM, 3));
 	edit_ctrl_tc->Bind(wxEVT_TEXT, &SubsEditBox::OnChangeTc, this);
-	// TextSelectionController is STC-specific; native controls don't use it
-	context->textSelectionController->SetControl(nullptr);
+	context->textSelectionController->SetControl(edit_ctrl_tc);
 	edit_ctrl_tc->SetFocus();
 #endif
 
@@ -281,7 +281,7 @@ SubsEditBox::SubsEditBox(wxWindow *parent, agi::Context *context)
 		context->selectionController->AddActiveLineListener(&SubsEditBox::OnActiveLineChanged, this),
 		context->selectionController->AddSelectionListener(&SubsEditBox::OnSelectedSetChanged, this),
 		context->initialLineState->AddChangeListener(&SubsEditBox::OnLineInitialTextChanged, this),
-	 });
+	});
 
 	bool show_original = OPT_GET("Subtitle/Show Original")->GetBool();
 	if (show_original) {
@@ -394,14 +394,16 @@ void SubsEditBox::UpdateFields(int type, bool repopulate_lists) {
 
 	if (type & AssFile::COMMIT_DIAG_TEXT) {
 #ifdef WITH_WXSTC
-		if (use_stc) {
-			edit_ctrl_stc->SetTextTo(line->Text);
-		}
-		else {
+	if (use_stc) {
+	    edit_ctrl_stc->SetTextTo(line->Text);
+	}
+	else {
 #endif
-			edit_ctrl_tc->SetValue(to_wx(line->Text));
+	    // Use SetTextTo for native control as well so the
+	    // TextSelectionController stays in sync (handles UTF-8 mapping).
+	    edit_ctrl_tc->SetTextTo(line->Text);
 #ifdef WITH_WXSTC
-		}
+	}
 #endif
 		UpdateCharacterCount(line->Text);
 	}
