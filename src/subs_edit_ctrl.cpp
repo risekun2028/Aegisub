@@ -40,7 +40,7 @@
 #include "ass_dialogue.h"
 #include "selection_controller.h"
 #include "subtitle_format.h"
-#include "ass_syntax_highlight.h"
+#include <libaegisub/ass/dialogue_parser.h>
 
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string.hpp>
