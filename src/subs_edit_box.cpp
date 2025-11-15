@@ -291,7 +291,13 @@ SubsEditBox::SubsEditBox(wxWindow *parent, agi::Context *context)
 }
 
 SubsEditBox::~SubsEditBox() {
-	c->textSelectionController->SetControl(nullptr);
+	// Disambiguate nullptr for overloaded SetControl by casting to the
+	// specific control pointer types. Call both to ensure any bound control
+	// is cleared regardless of which overload was used to set it.
+#ifdef WITH_WXSTC
+	c->textSelectionController->SetControl(static_cast<wxStyledTextCtrl*>(nullptr));
+#endif
+	c->textSelectionController->SetControl(static_cast<wxTextCtrl*>(nullptr));
 }
 
 wxTextCtrl *SubsEditBox::MakeMarginCtrl(wxString const& tooltip, int margin, wxString const& commit_msg) {
