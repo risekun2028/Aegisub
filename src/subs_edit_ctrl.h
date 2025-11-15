@@ -34,6 +34,7 @@
 #include <wx/stc/stc.h>
 
 #include "ass_dialogue.h"
+#include <libaegisub/spellchecker.h>
 
 class Thesaurus;
 namespace agi {
