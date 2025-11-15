@@ -75,9 +75,6 @@ class SubsTextEditCtrl final : public wxTextCtrl {
 	/// Toggle Right-to-Left reading order (context menu action)
 	void OnToggleRTL(wxCommandEvent &event);
 
-	/// The last seen line text, used to avoid invalid substring/index ops
-	std::string line_text;
-
 public:
 	SubsTextEditCtrl(wxWindow* parent, wxSize size, long style, agi::Context *context);
 	~SubsTextEditCtrl();
