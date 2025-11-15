@@ -33,15 +33,12 @@
 #include "compat.h"
 #include "options.h"
 #include "include/aegisub/context.h"
+#include "text_selection_controller.h"
 #include "utils.h"
 
-#include <boost/algorithm/string/replace.hpp>
-#include <functional>
+#include <libaegisub/character_count.h>
 
-#include <wx/clipbrd.h>
-#include <wx/intl.h>
-#include <wx/menu.h>
-#include <wx/settings.h>
+#include <boost/algorithm/string/replace.hpp>
 
 // Maximum number of languages (locales)
 #define LANGS_MAX 1000
@@ -64,7 +61,8 @@ enum {
 	EDIT_MENU_DIC_LANGUAGE = (wxID_HIGHEST + 1) + 6000,
 	EDIT_MENU_DIC_LANGS,
 	EDIT_MENU_THES_LANGUAGE = EDIT_MENU_DIC_LANGUAGE + LANGS_MAX,
-	EDIT_MENU_THES_LANGS
+	EDIT_MENU_THES_LANGS,
+	EDIT_MENU_RTL = (wxID_HIGHEST + 1) + 7000
 };
 
 SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, agi::Context* context)
@@ -87,6 +85,8 @@ SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, a
 		Bind(wxEVT_MENU, bind(&cmd::call, "edit/line/split/estimate", context), EDIT_MENU_SPLIT_ESTIMATE);
 		Bind(wxEVT_MENU, bind(&cmd::call, "edit/line/split/video", context), EDIT_MENU_SPLIT_VIDEO);
 		Bind(wxEVT_CONTEXT_MENU, &SubsTextEditCtrl::OnContextMenu, this);
+		// Bind RTL toggle (fallback) so native mode has an explicit toggle
+		Bind(wxEVT_MENU, &SubsTextEditCtrl::OnToggleRTL, this, EDIT_MENU_RTL);
 	}
 
 	OPT_SUB("Subtitle/Edit Box/Font Face", &SubsTextEditCtrl::SetStyles, this);
@@ -127,13 +127,6 @@ void SubsTextEditCtrl::SetStyles() {
 }
 
 void SubsTextEditCtrl::OnContextMenu(wxContextMenuEvent& event) {
-	// KEY FEATURE: Shift+Right-Click shows native OS context menu
-	// This gives access to OS-specific features like RTL text display on Ubuntu
-	if (wxGetKeyState(WXK_SHIFT)) {
-		event.Skip();  // Show native context menu
-		return;
-	}
-
 	wxMenu menu;
 
 	// Standard actions
@@ -151,6 +144,10 @@ void SubsTextEditCtrl::OnContextMenu(wxContextMenuEvent& event) {
 		cmd::Command* split_video = cmd::get("edit/line/split/video");
 		menu.Append(EDIT_MENU_SPLIT_VIDEO, split_video->StrMenu(context))->Enable(split_video->Validate(context));
 	}
+
+	// Add explicit RTL toggle fallback so native mode always has the option
+	menu.AppendSeparator();
+	menu.Append(EDIT_MENU_RTL, _("Right to left Reading order"));
 
 	PopupMenu(&menu);
 }
@@ -175,14 +172,46 @@ void SubsTextEditCtrl::Paste() {
 }
 
 void SubsTextEditCtrl::SetTextTo(std::string const& text) {
-	SetValue(to_wx(text));
+	// Mirror STC behaviour: preserve insertion point, update selection controller
+	SetEvtHandlerEnabled(false);
+	Freeze();
+
+	long insertion_point = GetInsertionPoint();
+
+	// Get current value as std::string
+	wxCharBuffer curbuf = GetValue().utf8_str();
+	std::string cur = curbuf.data() ? std::string(curbuf.data(), curbuf.length()) : std::string();
+
+	if (static_cast<size_t>(insertion_point) > cur.size())
+		; // nothing to do, cur is up-to-date
+
+	// Compute old character index (clamped)
+	size_t clamp_pos = std::min<size_t>(cur.size(), static_cast<size_t>(std::max<long>(0, insertion_point)));
+	size_t old_pos = agi::CharacterCount(cur.begin(), cur.begin() + clamp_pos, 0);
+
+	if (context) {
+		context->textSelectionController->SetSelection(0, 0);
+		SetValue(to_wx(text));
+		auto pos = agi::IndexOfCharacter(text, old_pos);
+		context->textSelectionController->SetSelection(pos, pos);
+	}
+	else {
+		SetSelection(0, 0);
+		SetValue(to_wx(text));
+		auto pos = agi::IndexOfCharacter(text, old_pos);
+		SetSelection(pos, pos);
+	}
+
+	SetEvtHandlerEnabled(true);
+	Thaw();
 }
 
 std::pair<int, int> SubsTextEditCtrl::GetBoundsOfWordAtPosition(int pos) {
 	// Simple word boundary detection for native wxTextCtrl
 	// Returns {start_pos, length} of word at position pos
 	wxString text = GetValue();
-	if (pos < 0 || pos > (int)text.length()) return {0, 0};
+	// Handle empty control or invalid position
+	if (text.empty() || pos < 0 || pos > (int)text.length()) return {0, 0};
 
 	// Find start of word
 	int start = pos;
@@ -211,4 +240,12 @@ void SubsTextEditCtrl::AddThesaurusEntries(wxMenu &menu) {
 wxMenu *SubsTextEditCtrl::GetLanguagesMenu(int base_id, wxString const& curLang, wxArrayString const& langs) {
 	// Placeholder
 	return nullptr;
+}
+
+void SubsTextEditCtrl::OnToggleRTL(wxCommandEvent &event) {
+	wxLayoutDirection cur = GetLayoutDirection();
+	wxLayoutDirection next = (cur == wxLayout_RightToLeft) ? wxLayout_LeftToRight : wxLayout_RightToLeft;
+	SetLayoutDirection(next);
+	// Also update caret/selection behavior by refreshing control
+	Refresh();
 }
