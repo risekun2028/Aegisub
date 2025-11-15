@@ -219,3 +219,11 @@ wxMenu *SubsTextEditCtrl::GetLanguagesMenu(int base_id, wxString const& curLang,
 	// Placeholder
 	return nullptr;
 }
+
+void SubsTextEditCtrl::OnToggleRTL(wxCommandEvent &event) {
+	wxLayoutDirection cur = GetLayoutDirection();
+	wxLayoutDirection next = (cur == wxLayout_RightToLeft) ? wxLayout_LeftToRight : wxLayout_RightToLeft;
+	SetLayoutDirection(next);
+	// Also update caret/selection behavior by refreshing control
+	Refresh();
+}
