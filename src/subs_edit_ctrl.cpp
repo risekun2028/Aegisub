@@ -31,13 +31,18 @@
 
 #include "command/command.h"
 #include "compat.h"
+#include "format.h"
 #include "options.h"
 #include "include/aegisub/context.h"
 #include "include/aegisub/spellchecker.h"
 #include "thesaurus.h"
 #include "utils.h"
+#include "ass_dialogue.h"
+#include "selection_controller.h"
+#include "subtitle_format.h"
 
 #include <boost/algorithm/string/replace.hpp>
+#include <boost/algorithm/string.hpp>
 #include <functional>
 
 #include <wx/clipbrd.h>
@@ -72,7 +77,7 @@ enum {
 SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, agi::Context* context)
 	: wxStyledTextCtrl(parent, wxID_ANY, wxDefaultPosition, wsize, style)
 	, spellchecker(SpellCheckerFactory::GetSpellChecker())
-	, thesaurus(agi::make_unique<Thesaurus>())
+	, thesaurus(std::make_unique<Thesaurus>())
 	, context(context)
 {
 	SetStyles();
@@ -173,68 +178,66 @@ void SubsTextEditCtrl::SetStyles() {
 
 	auto default_background = to_wx(OPT_GET("Colour/Subtitle/Background")->GetColor());
 
-	namespace ss = agi::ass::SyntaxStyle;
-	
-	// Set up each syntax style
-	StyleSetFont(ss::NORMAL, font);
-	StyleSetForeground(ss::NORMAL, to_wx(OPT_GET("Colour/Subtitle/Syntax/Normal")->GetColor()));
-	StyleSetBackground(ss::NORMAL, default_background);
+	// Set up each syntax style using STC methods
+	StyleSetFont(agi::ass::SyntaxStyle::NORMAL, font);
+	StyleSetForeground(agi::ass::SyntaxStyle::NORMAL, to_wx(OPT_GET("Colour/Subtitle/Syntax/Normal")->GetColor()));
+	StyleSetBackground(agi::ass::SyntaxStyle::NORMAL, default_background);
 
-	StyleSetFont(ss::COMMENT, font);
-	StyleSetForeground(ss::COMMENT, to_wx(OPT_GET("Colour/Subtitle/Syntax/Comment")->GetColor()));
-	StyleSetBackground(ss::COMMENT, default_background);
+	StyleSetFont(agi::ass::SyntaxStyle::COMMENT, font);
+	StyleSetForeground(agi::ass::SyntaxStyle::COMMENT, to_wx(OPT_GET("Colour/Subtitle/Syntax/Comment")->GetColor()));
+	StyleSetBackground(agi::ass::SyntaxStyle::COMMENT, default_background);
 
-	StyleSetFont(ss::DRAWING_CMD, font);
-	StyleSetForeground(ss::DRAWING_CMD, to_wx(OPT_GET("Colour/Subtitle/Syntax/Drawing Command")->GetColor()));
-	StyleSetBackground(ss::DRAWING_CMD, default_background);
+	StyleSetFont(agi::ass::SyntaxStyle::DRAWING_CMD, font);
+	StyleSetForeground(agi::ass::SyntaxStyle::DRAWING_CMD, to_wx(OPT_GET("Colour/Subtitle/Syntax/Drawing Command")->GetColor()));
+	StyleSetBackground(agi::ass::SyntaxStyle::DRAWING_CMD, default_background);
 
-	StyleSetFont(ss::DRAWING_X, font);
-	StyleSetForeground(ss::DRAWING_X, to_wx(OPT_GET("Colour/Subtitle/Syntax/Drawing X")->GetColor()));
+	StyleSetFont(agi::ass::SyntaxStyle::DRAWING_X, font);
+	StyleSetForeground(agi::ass::SyntaxStyle::DRAWING_X, to_wx(OPT_GET("Colour/Subtitle/Syntax/Drawing X")->GetColor()));
 
-	StyleSetFont(ss::DRAWING_Y, font);
-	StyleSetForeground(ss::DRAWING_Y, to_wx(OPT_GET("Colour/Subtitle/Syntax/Drawing Y")->GetColor()));
+	StyleSetFont(agi::ass::SyntaxStyle::DRAWING_Y, font);
+	StyleSetForeground(agi::ass::SyntaxStyle::DRAWING_Y, to_wx(OPT_GET("Colour/Subtitle/Syntax/Drawing Y")->GetColor()));
 
-	StyleSetFont(ss::DRAWING_ENDPOINT_X, font);
-	StyleSetForeground(ss::DRAWING_ENDPOINT_X, to_wx(OPT_GET("Colour/Subtitle/Syntax/Drawing X")->GetColor()));
-	StyleSetUnderline(ss::DRAWING_ENDPOINT_X, OPT_GET("Colour/Subtitle/Syntax/Underline/Drawing Endpoint")->GetBool());
+	StyleSetFont(agi::ass::SyntaxStyle::DRAWING_ENDPOINT_X, font);
+	StyleSetForeground(agi::ass::SyntaxStyle::DRAWING_ENDPOINT_X, to_wx(OPT_GET("Colour/Subtitle/Syntax/Drawing X")->GetColor()));
+	StyleSetUnderline(agi::ass::SyntaxStyle::DRAWING_ENDPOINT_X, OPT_GET("Colour/Subtitle/Syntax/Underline/Drawing Endpoint")->GetBool());
 
-	StyleSetFont(ss::DRAWING_ENDPOINT_Y, font);
-	StyleSetForeground(ss::DRAWING_ENDPOINT_Y, to_wx(OPT_GET("Colour/Subtitle/Syntax/Drawing Y")->GetColor()));
-	StyleSetUnderline(ss::DRAWING_ENDPOINT_Y, OPT_GET("Colour/Subtitle/Syntax/Underline/Drawing Endpoint")->GetBool());
+	StyleSetFont(agi::ass::SyntaxStyle::DRAWING_ENDPOINT_Y, font);
+	StyleSetForeground(agi::ass::SyntaxStyle::DRAWING_ENDPOINT_Y, to_wx(OPT_GET("Colour/Subtitle/Syntax/Drawing Y")->GetColor()));
+	StyleSetUnderline(agi::ass::SyntaxStyle::DRAWING_ENDPOINT_Y, OPT_GET("Colour/Subtitle/Syntax/Underline/Drawing Endpoint")->GetBool());
 
-	StyleSetFont(ss::OVERRIDE, font);
-	StyleSetForeground(ss::OVERRIDE, to_wx(OPT_GET("Colour/Subtitle/Syntax/Brackets")->GetColor()));
-	StyleSetBackground(ss::OVERRIDE, default_background);
+	StyleSetFont(agi::ass::SyntaxStyle::OVERRIDE, font);
+	StyleSetForeground(agi::ass::SyntaxStyle::OVERRIDE, to_wx(OPT_GET("Colour/Subtitle/Syntax/Brackets")->GetColor()));
+	StyleSetBackground(agi::ass::SyntaxStyle::OVERRIDE, default_background);
 
-	StyleSetFont(ss::PUNCTUATION, font);
-	StyleSetForeground(ss::PUNCTUATION, to_wx(OPT_GET("Colour/Subtitle/Syntax/Slashes")->GetColor()));
-	StyleSetBackground(ss::PUNCTUATION, default_background);
+	StyleSetFont(agi::ass::SyntaxStyle::PUNCTUATION, font);
+	StyleSetForeground(agi::ass::SyntaxStyle::PUNCTUATION, to_wx(OPT_GET("Colour/Subtitle/Syntax/Slashes")->GetColor()));
+	StyleSetBackground(agi::ass::SyntaxStyle::PUNCTUATION, default_background);
 
-	StyleSetFont(ss::TAG, font);
-	StyleSetForeground(ss::TAG, to_wx(OPT_GET("Colour/Subtitle/Syntax/Tags")->GetColor()));
-	StyleSetBackground(ss::TAG, default_background);
+	StyleSetFont(agi::ass::SyntaxStyle::TAG, font);
+	StyleSetForeground(agi::ass::SyntaxStyle::TAG, to_wx(OPT_GET("Colour/Subtitle/Syntax/Tags")->GetColor()));
+	StyleSetBackground(agi::ass::SyntaxStyle::TAG, default_background);
 
-	StyleSetFont(ss::ERROR, font);
-	StyleSetForeground(ss::ERROR, to_wx(OPT_GET("Colour/Subtitle/Syntax/Error")->GetColor()));
-	StyleSetBackground(ss::ERROR, default_background);
+	StyleSetFont(agi::ass::SyntaxStyle::ERROR, font);
+	StyleSetForeground(agi::ass::SyntaxStyle::ERROR, to_wx(OPT_GET("Colour/Subtitle/Syntax/Error")->GetColor()));
+	StyleSetBackground(agi::ass::SyntaxStyle::ERROR, default_background);
 
-	StyleSetFont(ss::PARAMETER, font);
-	StyleSetForeground(ss::PARAMETER, to_wx(OPT_GET("Colour/Subtitle/Syntax/Parameters")->GetColor()));
-	StyleSetBackground(ss::PARAMETER, default_background);
+	StyleSetFont(agi::ass::SyntaxStyle::PARAMETER, font);
+	StyleSetForeground(agi::ass::SyntaxStyle::PARAMETER, to_wx(OPT_GET("Colour/Subtitle/Syntax/Parameters")->GetColor()));
+	StyleSetBackground(agi::ass::SyntaxStyle::PARAMETER, default_background);
 
-	StyleSetFont(ss::LINE_BREAK, font);
-	StyleSetForeground(ss::LINE_BREAK, to_wx(OPT_GET("Colour/Subtitle/Syntax/Line Break")->GetColor()));
-	StyleSetBackground(ss::LINE_BREAK, default_background);
+	StyleSetFont(agi::ass::SyntaxStyle::LINE_BREAK, font);
+	StyleSetForeground(agi::ass::SyntaxStyle::LINE_BREAK, to_wx(OPT_GET("Colour/Subtitle/Syntax/Line Break")->GetColor()));
+	StyleSetBackground(agi::ass::SyntaxStyle::LINE_BREAK, default_background);
 
-	StyleSetFont(ss::KARAOKE_TEMPLATE, font);
-	StyleSetForeground(ss::KARAOKE_TEMPLATE, to_wx(OPT_GET("Colour/Subtitle/Syntax/Karaoke Template")->GetColor()));
-	StyleSetBackground(ss::KARAOKE_TEMPLATE, default_background);
+	StyleSetFont(agi::ass::SyntaxStyle::KARAOKE_TEMPLATE, font);
+	StyleSetForeground(agi::ass::SyntaxStyle::KARAOKE_TEMPLATE, to_wx(OPT_GET("Colour/Subtitle/Syntax/Karaoke Template")->GetColor()));
+	StyleSetBackground(agi::ass::SyntaxStyle::KARAOKE_TEMPLATE, default_background);
 
-	StyleSetFont(ss::KARAOKE_VARIABLE, font);
-	StyleSetForeground(ss::KARAOKE_VARIABLE, to_wx(OPT_GET("Colour/Subtitle/Syntax/Karaoke Variable")->GetColor()));
-	StyleSetBackground(ss::KARAOKE_VARIABLE, default_background);
+	StyleSetFont(agi::ass::SyntaxStyle::KARAOKE_VARIABLE, font);
+	StyleSetForeground(agi::ass::SyntaxStyle::KARAOKE_VARIABLE, to_wx(OPT_GET("Colour/Subtitle/Syntax/Karaoke Variable")->GetColor()));
+	StyleSetBackground(agi::ass::SyntaxStyle::KARAOKE_VARIABLE, default_background);
 
-	SetCaretForeground(StyleGetForeground(ss::NORMAL));
+	SetCaretForeground(StyleGetForeground(agi::ass::SyntaxStyle::NORMAL));
 	StyleSetBackground(wxSTC_STYLE_DEFAULT, default_background);
 
 	// Misspelling indicator
@@ -259,11 +262,17 @@ void SubsTextEditCtrl::ApplyZoom() {
 
 void SubsTextEditCtrl::UpdateStyle() {
 	// Apply syntax highlighting with colors to different ASS tags using Scintilla
-	AssDialogue *diag = context ? context->selectionController->GetActiveLine() : nullptr;
-	bool template_line = diag && diag->Comment && (boost::istarts_with(diag->Effect.get(), "template") || boost::istarts_with(diag->Effect.get(), "mixin"));
-
 	std::string current_text = std::string(GetValue().utf8_str().data());
 	if (current_text == line_text) return; // No change, no need to update
+
+	bool template_line = false;
+	if (context && context->selectionController) {
+		AssDialogue *diag = context->selectionController->GetActiveLine();
+		if (diag && diag->Comment) {
+			template_line = boost::istarts_with(diag->Effect.get(), "template") || 
+			                boost::istarts_with(diag->Effect.get(), "mixin");
+		}
+	}
 
 	tokenized_line = agi::ass::TokenizeDialogueBody(current_text, template_line);
 	agi::ass::SplitWords(current_text, tokenized_line);
