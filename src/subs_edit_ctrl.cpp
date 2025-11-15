@@ -33,6 +33,7 @@
 #include "compat.h"
 #include "options.h"
 #include "include/aegisub/context.h"
+#include "text_selection_controller.h"
 #include "utils.h"
 
 #include <boost/algorithm/string/replace.hpp>
@@ -169,8 +170,8 @@ void SubsTextEditCtrl::Paste() {
 	std::string old = oldbuf.data() ? std::string(oldbuf.data(), oldbuf.length()) : std::string();
 
 	// Insert clipboard data at the current selection
-	long sel_start = GetSelectionStart();
-	long sel_end = GetSelectionEnd();
+	long sel_start, sel_end;
+	GetSelection(&sel_start, &sel_end);
 	std::string new_text;
 	new_text.reserve(old.size() + data.size());
 	if (static_cast<size_t>(sel_start) <= old.size())
