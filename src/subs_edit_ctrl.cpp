@@ -130,13 +130,6 @@ void SubsTextEditCtrl::SetStyles() {
 }
 
 void SubsTextEditCtrl::OnContextMenu(wxContextMenuEvent& event) {
-	// KEY FEATURE: Shift+Right-Click shows native OS context menu
-	// This gives access to OS-specific features like RTL text display on Ubuntu
-	if (wxGetKeyState(WXK_SHIFT)) {
-		event.Skip();  // Show native context menu
-		return;
-	}
-
 	wxMenu menu;
 
 	// Standard actions
@@ -189,7 +182,8 @@ std::pair<int, int> SubsTextEditCtrl::GetBoundsOfWordAtPosition(int pos) {
 	// Simple word boundary detection for native wxTextCtrl
 	// Returns {start_pos, length} of word at position pos
 	wxString text = GetValue();
-	if (pos < 0 || pos > (int)text.length()) return {0, 0};
+	// Handle empty control or invalid position
+	if (text.empty() || pos < 0 || pos > (int)text.length()) return {0, 0};
 
 	// Find start of word
 	int start = pos;
