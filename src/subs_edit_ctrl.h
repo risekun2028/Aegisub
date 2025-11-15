@@ -107,9 +107,6 @@ class SubsTextEditCtrl final : public wxStyledTextCtrl {
 	/// Update font size based on zoom level
 	void ApplyZoom();
 
-	/// Apply syntax highlighting with colored tags
-	void UpdateStyle();
-
 public:
 	SubsTextEditCtrl(wxWindow* parent, wxSize size, long style, agi::Context *context);
 	~SubsTextEditCtrl();
