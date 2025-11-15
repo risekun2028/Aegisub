@@ -404,13 +404,6 @@ void SubsStyledTextEditCtrl::OnContextMenu(wxContextMenuEvent &event) {
 	else
 		activePos = PositionFromPoint(ScreenToClient(pos));
 
-	// KEY FEATURE: Shift+Right-Click shows native OS context menu on Linux
-	// This gives access to OS-specific features like IME and RTL text display
-	if (wxGetKeyState(WXK_SHIFT)) {
-		event.Skip();  // Show native context menu
-		return;
-	}
-
 	currentWordPos = GetBoundsOfWordAtPosition(activePos);
 	currentWord = line_text.substr(currentWordPos.first, currentWordPos.second);
 
