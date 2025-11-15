@@ -36,16 +36,20 @@
 #include "include/aegisub/context.h"
 #include "include/aegisub/spellchecker.h"
 #include <libaegisub/spellchecker.h>
+#include "text_selection_controller.h"
 #include "thesaurus.h"
 #include "utils.h"
 #include "ass_dialogue.h"
 #include "selection_controller.h"
 #include "subtitle_format.h"
 #include <libaegisub/ass/dialogue_parser.h>
+#include <libaegisub/character_count.h>
 
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string.hpp>
 #include <functional>
+
+#include <libaegisub/calltip_provider.h>
 
 #include <wx/clipbrd.h>
 #include <wx/intl.h>
@@ -91,17 +95,17 @@ SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, a
 	SetStyles();
 
 	// Set hotkeys
-	CmdKeyClear(wxSTC_KEY_RETURN, wxSTC_KEYMOD_CTRL);
-	CmdKeyClear(wxSTC_KEY_RETURN, wxSTC_KEYMOD_SHIFT);
-	CmdKeyClear(wxSTC_KEY_RETURN, wxSTC_KEYMOD_NORM);
-	CmdKeyClear(wxSTC_KEY_TAB, wxSTC_KEYMOD_NORM);
-	CmdKeyClear(wxSTC_KEY_TAB, wxSTC_KEYMOD_SHIFT);
-	CmdKeyClear('D', wxSTC_KEYMOD_CTRL);
-	CmdKeyClear('L', wxSTC_KEYMOD_CTRL);
-	CmdKeyClear('L', wxSTC_KEYMOD_CTRL | wxSTC_KEYMOD_SHIFT);
-	CmdKeyClear('T', wxSTC_KEYMOD_CTRL);
-	CmdKeyClear('T', wxSTC_KEYMOD_CTRL | wxSTC_KEYMOD_SHIFT);
-	CmdKeyClear('U', wxSTC_KEYMOD_CTRL);
+	CmdKeyClear(wxSTC_KEY_RETURN, wxSTC_SCMOD_CTRL);
+	CmdKeyClear(wxSTC_KEY_RETURN, wxSTC_SCMOD_SHIFT);
+	CmdKeyClear(wxSTC_KEY_RETURN, wxSTC_SCMOD_NORM);
+	CmdKeyClear(wxSTC_KEY_TAB, wxSTC_SCMOD_NORM);
+	CmdKeyClear(wxSTC_KEY_TAB, wxSTC_SCMOD_SHIFT);
+	CmdKeyClear('D', wxSTC_SCMOD_CTRL);
+	CmdKeyClear('L', wxSTC_SCMOD_CTRL);
+	CmdKeyClear('L', wxSTC_SCMOD_CTRL | wxSTC_SCMOD_SHIFT);
+	CmdKeyClear('T', wxSTC_SCMOD_CTRL);
+	CmdKeyClear('T', wxSTC_SCMOD_CTRL | wxSTC_SCMOD_SHIFT);
+	CmdKeyClear('U', wxSTC_SCMOD_CTRL);
 
 	using std::bind;
 
