@@ -35,6 +35,7 @@
 #include "options.h"
 #include "include/aegisub/context.h"
 #include "include/aegisub/spellchecker.h"
+#include <libaegisub/spellchecker.h>
 #include "thesaurus.h"
 #include "utils.h"
 #include "ass_dialogue.h"
