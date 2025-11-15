@@ -33,18 +33,9 @@
 #include "compat.h"
 #include "options.h"
 #include "include/aegisub/context.h"
-#include "text_selection_controller.h"
 #include "utils.h"
 
 #include <boost/algorithm/string/replace.hpp>
-#include <functional>
-
-#include <wx/clipbrd.h>
-#include <wx/intl.h>
-#include <wx/menu.h>
-#include <wx/settings.h>
-
-#include <libaegisub/character_count.h>
 
 // Maximum number of languages (locales)
 #define LANGS_MAX 1000
@@ -165,80 +156,20 @@ void SubsTextEditCtrl::Paste() {
 	boost::replace_all(data, "\n", "\\N");
 	boost::replace_all(data, "\r", "\\N");
 
-	// Convert current control value to std::string (UTF-8)
-	wxCharBuffer oldbuf = GetValue().utf8_str();
-	std::string old = oldbuf.data() ? std::string(oldbuf.data(), oldbuf.length()) : std::string();
-
-	// Insert clipboard data at the current selection
 	long sel_start, sel_end;
 	GetSelection(&sel_start, &sel_end);
-	std::string new_text;
-	new_text.reserve(old.size() + data.size());
-	if (static_cast<size_t>(sel_start) <= old.size())
-		new_text.append(old.data(), sel_start);
-	new_text.append(data);
-	if (static_cast<size_t>(sel_end) <= old.size())
-		new_text.append(old.data() + sel_end, old.size() - sel_end);
-
-	// Update internal line_text and UI, preserving caret/selection similar to STC
-	SetEvtHandlerEnabled(false);
+	wxString data_first_half = GetRange(0, sel_start) + to_wx(data);
+	wxString data_full = data_first_half + GetRange(sel_end, GetLastPosition());
 	Freeze();
-
-	if (context) {
-		context->textSelectionController->SetSelection(0, 0);
-		SetValue(to_wx(new_text));
-		line_text = new_text;
-		// Place caret at the insertion point (character-based)
-		size_t caret_chars = agi::CharacterCount(new_text.begin(), new_text.begin() + std::min<size_t>(new_text.size(), static_cast<size_t>(sel_start + data.size())), 0);
-		auto pos = agi::IndexOfCharacter(new_text, caret_chars);
-		context->textSelectionController->SetSelection(pos, pos);
-	}
-	else {
-		SetValue(to_wx(new_text));
-		line_text = new_text;
-		SetSelection(sel_start + (long)data.size(), sel_start + (long)data.size());
-	}
-
-	SetEvtHandlerEnabled(true);
+	SetValue(data_first_half);
+	sel_start = GetLastPosition();
+	SetValue(data_full);
+	SetSelection(sel_start, sel_start);
 	Thaw();
 }
 
 void SubsTextEditCtrl::SetTextTo(std::string const& text) {
-	// Mirror STC behaviour: preserve insertion point, update selection controller
-	SetEvtHandlerEnabled(false);
-	Freeze();
-
-	long insertion_point = GetInsertionPoint();
-
-	// Get current value as std::string
-	wxCharBuffer curbuf = GetValue().utf8_str();
-	std::string cur = curbuf.data() ? std::string(curbuf.data(), curbuf.length()) : std::string();
-
-	if (static_cast<size_t>(insertion_point) > line_text.size())
-		line_text = cur;
-
-	// Compute old character index (clamped)
-	size_t clamp_pos = std::min<size_t>(line_text.size(), static_cast<size_t>(std::max<long>(0, insertion_point)));
-	size_t old_pos = agi::CharacterCount(line_text.begin(), line_text.begin() + clamp_pos, 0);
-	line_text.clear();
-
-	if (context) {
-		context->textSelectionController->SetSelection(0, 0);
-		SetValue(to_wx(text));
-		line_text = text;
-		auto pos = agi::IndexOfCharacter(text, old_pos);
-		context->textSelectionController->SetSelection(pos, pos);
-	}
-	else {
-		SetSelection(0, 0);
-		SetValue(to_wx(text));
-		line_text = text;
-		auto pos = agi::IndexOfCharacter(text, old_pos);
-		SetSelection(pos, pos);
-	}
-
-	SetEvtHandlerEnabled(true);
-	Thaw();
+	SetValue(to_wx(text));
 }
 
 std::pair<int, int> SubsTextEditCtrl::GetBoundsOfWordAtPosition(int pos) {
