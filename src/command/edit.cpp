@@ -246,8 +246,7 @@ struct parsed_line {
 			shift += 2;
 			blocks = line->ParseTags();
 		}
-		else {
-			// We've reached here, ovr cannot be null
+		else if (ovr) {
 			std::string alt;
 			if (tag == "\\c") alt = "\\1c";
 			// Remove old of same
@@ -271,6 +270,8 @@ struct parsed_line {
 
 			line->UpdateText(blocks);
 		}
+		else
+			assert(false);
 
 		return shift;
 	}
@@ -543,7 +544,7 @@ struct edit_find_replace final : public Command {
 
 	void operator()(agi::Context *c) override {
 		c->videoController->Stop();
-		DialogSearchReplace::Show(c, true);
+		ShowSearchReplaceDialog(c, true);
 	}
 };
 
@@ -1261,7 +1262,6 @@ struct edit_insert_original final : public Command {
 
 		line->Text = line->Text.get().substr(0, sel_start) + c->initialLineState->GetInitialText() + line->Text.get().substr(sel_end);
 		c->ass->Commit(_("insert original"), AssFile::COMMIT_DIAG_TEXT, -1, line);
-		c->textSelectionController->SetSelection(sel_start, sel_start + c->initialLineState->GetInitialText().length());
 	}
 };
 
