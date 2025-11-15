@@ -64,7 +64,8 @@ enum {
 	EDIT_MENU_DIC_LANGUAGE = (wxID_HIGHEST + 1) + 6000,
 	EDIT_MENU_DIC_LANGS,
 	EDIT_MENU_THES_LANGUAGE = EDIT_MENU_DIC_LANGUAGE + LANGS_MAX,
-	EDIT_MENU_THES_LANGS
+	EDIT_MENU_THES_LANGS,
+	EDIT_MENU_RTL = (wxID_HIGHEST + 1) + 7000
 };
 
 SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, agi::Context* context)
@@ -87,6 +88,8 @@ SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, a
 		Bind(wxEVT_MENU, bind(&cmd::call, "edit/line/split/estimate", context), EDIT_MENU_SPLIT_ESTIMATE);
 		Bind(wxEVT_MENU, bind(&cmd::call, "edit/line/split/video", context), EDIT_MENU_SPLIT_VIDEO);
 		Bind(wxEVT_CONTEXT_MENU, &SubsTextEditCtrl::OnContextMenu, this);
+		// Bind RTL toggle (fallback) so native mode has an explicit toggle
+		Bind(wxEVT_MENU, &SubsTextEditCtrl::OnToggleRTL, this, EDIT_MENU_RTL);
 	}
 
 	OPT_SUB("Subtitle/Edit Box/Font Face", &SubsTextEditCtrl::SetStyles, this);
@@ -151,6 +154,10 @@ void SubsTextEditCtrl::OnContextMenu(wxContextMenuEvent& event) {
 		cmd::Command* split_video = cmd::get("edit/line/split/video");
 		menu.Append(EDIT_MENU_SPLIT_VIDEO, split_video->StrMenu(context))->Enable(split_video->Validate(context));
 	}
+
+	// Add explicit RTL toggle fallback so native mode always has the option
+	menu.AppendSeparator();
+	menu.Append(EDIT_MENU_RTL, _("Right to left Reading order"));
 
 	PopupMenu(&menu);
 }
