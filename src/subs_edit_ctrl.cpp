@@ -56,6 +56,18 @@
 #include <wx/menu.h>
 #include <wx/settings.h>
 
+// Define compatibility macros for different wxWidgets/Scintilla versions.
+// Some wxWidgets builds expose wxSTC_KEYMOD_* while others expose wxSTC_SCMOD_*.
+#ifndef wxSTC_SCMOD_CTRL
+#define wxSTC_SCMOD_CTRL wxSTC_KEYMOD_CTRL
+#endif
+#ifndef wxSTC_SCMOD_SHIFT
+#define wxSTC_SCMOD_SHIFT wxSTC_KEYMOD_SHIFT
+#endif
+#ifndef wxSTC_SCMOD_NORM
+#define wxSTC_SCMOD_NORM wxSTC_KEYMOD_NORM
+#endif
+
 // Maximum number of languages (locales)
 #define LANGS_MAX 1000
 
@@ -180,12 +192,21 @@ void SubsTextEditCtrl::Subscribe(std::string const& name) {
 
 void SubsTextEditCtrl::OnKeyDown(wxKeyEvent& event) {
 	if (osx::ime::process_key_event(this, event)) return;
+	// Let OS handle IME / modifier-based direction toggles
+	// If user presses left/right control or shift while both Ctrl+Shift are down,
+	// let the event pass through so the OS can toggle text direction (LTR/RTL).
+	int key = event.GetKeyCode();
+	if ((key == WXK_LCONTROL || key == WXK_RCONTROL || key == WXK_LSHIFT || key == WXK_RSHIFT) &&
+		(event.GetModifiers() & (wxMOD_CONTROL | wxMOD_SHIFT)) == (wxMOD_CONTROL | wxMOD_SHIFT)) {
+		event.Skip();
+		return;
+	}
+
 	event.Skip();
 
-	// Allow Ctrl+Shift+Right/Left to pass through to OS for RTL text direction toggle
-	// This is critical for Arabic and Hebrew text support on Linux/Ubuntu
-	if ((event.GetKeyCode() == WXK_LEFT || event.GetKeyCode() == WXK_RIGHT) && 
-	    event.GetModifiers() == (wxMOD_CONTROL | wxMOD_SHIFT)) {
+	// Allow Ctrl+Shift+Right/Left arrow to pass through to OS for RTL text direction toggle
+	if ((event.GetKeyCode() == WXK_LEFT || event.GetKeyCode() == WXK_RIGHT) &&
+		(event.GetModifiers() & (wxMOD_CONTROL | wxMOD_SHIFT)) == (wxMOD_CONTROL | wxMOD_SHIFT)) {
 		event.Skip();  // Let OS handle RTL toggle
 		return;
 	}
@@ -336,6 +357,12 @@ void SubsTextEditCtrl::OnDoubleClick(wxStyledTextEvent &evt) {
 }
 
 void SubsTextEditCtrl::OnContextMenu(wxContextMenuEvent& event) {
+	// If the user holds Shift while right-clicking, allow the native context
+	// menu to appear (some OS provide extra actions such as RTL/LTR toggles).
+	if (wxGetKeyState(WXK_SHIFT)) {
+		event.Skip();
+		return;
+	}
 	wxPoint pos = event.GetPosition();
 	int activePos;
 	if (pos == wxDefaultPosition)
