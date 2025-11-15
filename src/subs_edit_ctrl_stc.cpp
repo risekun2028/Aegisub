@@ -293,11 +293,6 @@ void SubsStyledTextEditCtrl::UpdateStyle() {
 	AssDialogue *diag = context ? context->selectionController->GetActiveLine() : nullptr;
 	bool template_line = diag && diag->Comment && (boost::istarts_with(diag->Effect.get(), "template") || boost::istarts_with(diag->Effect.get(), "mixin"));
 
-	// Ensure line_text is current
-	if (line_text.empty()) {
-		line_text = GetTextRaw().data();
-	}
-
 	tokenized_line = agi::ass::TokenizeDialogueBody(line_text, template_line);
 	agi::ass::SplitWords(line_text, tokenized_line);
 
@@ -416,18 +411,8 @@ void SubsStyledTextEditCtrl::OnContextMenu(wxContextMenuEvent &event) {
 		return;
 	}
 
-	// Ensure line_text is up-to-date before using it
-	std::string current_text = GetTextRaw().data();
-	if (current_text != line_text) {
-		line_text = current_text;
-	}
-
 	currentWordPos = GetBoundsOfWordAtPosition(activePos);
-	if (currentWordPos.first < (int)line_text.size() && currentWordPos.second > 0) {
-		currentWord = line_text.substr(currentWordPos.first, currentWordPos.second);
-	} else {
-		currentWord.clear();
-	}
+	currentWord = line_text.substr(currentWordPos.first, currentWordPos.second);
 
 	wxMenu menu;
 	if (spellchecker) {
@@ -638,11 +623,6 @@ void SubsStyledTextEditCtrl::OnToggleRTL(wxCommandEvent &event) {
 }
 
 std::pair<int, int> SubsStyledTextEditCtrl::GetBoundsOfWordAtPosition(int pos) {
-	// Safety check: ensure pos is within bounds
-	if (pos < 0 || pos > (int)line_text.size() || line_text.empty()) {
-		return {0, 0};
-	}
-
 	int len = 0;
 	for (auto const& tok : tokenized_line) {
 		if (len + (int)tok.length > pos) {
