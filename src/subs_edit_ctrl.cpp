@@ -82,6 +82,9 @@ SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, a
 	, thesaurus(std::make_unique<Thesaurus>())
 	, context(context)
 {
+	SetWrapMode(wxSTC_WRAP_WORD);
+	SetMarginWidth(1, 0);
+	UsePopUp(false);
 	SetStyles();
 
 	using std::bind;
@@ -398,7 +401,9 @@ void SubsTextEditCtrl::Paste() {
 }
 
 void SubsTextEditCtrl::SetTextTo(std::string const& text) {
+	line_text.clear();  // Force reparsing on next UpdateStyle
 	SetValue(to_wx(text));
+	UpdateStyle();  // Apply syntax highlighting to newly set text
 }
 
 std::pair<int, int> SubsTextEditCtrl::GetBoundsOfWordAtPosition(int pos) {
