@@ -366,8 +366,19 @@ void SubsTextEditCtrl::OnContextMenu(wxContextMenuEvent& event) {
 	else
 		activePos = PositionFromPoint(ScreenToClient(pos));
 
+	// Ensure line_text is up-to-date before extracting word
+	std::string text = GetTextRaw().data();
+	if (text != line_text) {
+		line_text = text;
+		UpdateStyle();  // This will update tokenized_line
+	}
+
 	currentWordPos = GetBoundsOfWordAtPosition(activePos);
-	currentWord = line_text.substr(currentWordPos.first, currentWordPos.second);
+	if (currentWordPos.second > 0) {
+		currentWord = line_text.substr(currentWordPos.first, currentWordPos.second);
+	} else {
+		currentWord.clear();
+	}
 
 	wxMenu menu;
 	if (spellchecker) {
@@ -450,24 +461,17 @@ void SubsTextEditCtrl::SetTextTo(std::string const& text) {
 }
 
 std::pair<int, int> SubsTextEditCtrl::GetBoundsOfWordAtPosition(int pos) {
-	// Simple word boundary detection for native wxTextCtrl
-	// Returns {start_pos, length} of word at position pos
-	wxString text = GetValue();
-	if (pos < 0 || pos > (int)text.length()) return {0, 0};
-
-	// Find start of word
-	int start = pos;
-	while (start > 0 && wxIsalnum(text[start - 1])) {
-		start--;
+	int len = 0;
+	for (auto const& tok : tokenized_line) {
+		if (len + (int)tok.length > pos) {
+			if (tok.type == agi::ass::DialogueTokenType::WORD)
+				return {len, tok.length};
+			return {0, 0};
+		}
+		len += tok.length;
 	}
 
-	// Find end of word
-	int end = pos;
-	while (end < (int)text.length() && wxIsalnum(text[end])) {
-		end++;
-	}
-
-	return {start, end - start};
+	return {0, 0};
 }
 
 // Placeholder implementations for menu items (simplified for wxTextCtrl)
