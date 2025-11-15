@@ -192,24 +192,23 @@ void SubsTextEditCtrl::Subscribe(std::string const& name) {
 
 void SubsTextEditCtrl::OnKeyDown(wxKeyEvent& event) {
 	if (osx::ime::process_key_event(this, event)) return;
-	// Let OS handle IME / modifier-based direction toggles
-	// If user presses left/right control or shift while both Ctrl+Shift are down,
-	// let the event pass through so the OS can toggle text direction (LTR/RTL).
+	// Let OS handle modifier-based direction toggles. Some wx versions don't
+	// expose left/right-specific virtual key constants, so check the generic
+	// CONTROL/SHIFT keys and modifier flags instead.
 	int key = event.GetKeyCode();
-	if ((key == WXK_LCONTROL || key == WXK_RCONTROL || key == WXK_LSHIFT || key == WXK_RSHIFT) &&
-		(event.GetModifiers() & (wxMOD_CONTROL | wxMOD_SHIFT)) == (wxMOD_CONTROL | wxMOD_SHIFT)) {
-		event.Skip();
-		return;
+	bool ctrlShiftDown = (event.GetModifiers() & (wxMOD_CONTROL | wxMOD_SHIFT)) == (wxMOD_CONTROL | wxMOD_SHIFT);
+
+	if (ctrlShiftDown) {
+		// If the key is an arrow key or a modifier key, allow the OS to handle
+		// direction toggling (LTR/RTL) by skipping the event here.
+		if (key == WXK_LEFT || key == WXK_RIGHT || key == WXK_CONTROL || key == WXK_SHIFT) {
+			event.Skip();
+			return;
+		}
 	}
 
+	// Default: continue processing the event in the control.
 	event.Skip();
-
-	// Allow Ctrl+Shift+Right/Left arrow to pass through to OS for RTL text direction toggle
-	if ((event.GetKeyCode() == WXK_LEFT || event.GetKeyCode() == WXK_RIGHT) &&
-		(event.GetModifiers() & (wxMOD_CONTROL | wxMOD_SHIFT)) == (wxMOD_CONTROL | wxMOD_SHIFT)) {
-		event.Skip();  // Let OS handle RTL toggle
-		return;
-	}
 
 	// Workaround for wxSTC eating tabs.
 	if (event.GetKeyCode() == WXK_TAB)
@@ -282,7 +281,10 @@ void SubsTextEditCtrl::SetStyles() {
 
 void SubsTextEditCtrl::UpdateStyle() {
 	// Apply syntax highlighting with colors to different ASS tags using Scintilla
-	std::string current_text = std::string(GetValue().utf8_str().data());
+	// Use GetTextRaw() to obtain the current raw text (UTF-8) like the STC
+	// implementation does; this avoids discrepancies between GetValue() and
+	// Scintilla's raw buffer and ensures styling runs when appropriate.
+	std::string current_text = std::string(GetTextRaw().data());
 	if (current_text == line_text) return; // No change, no need to update
 
 	bool template_line = false;
