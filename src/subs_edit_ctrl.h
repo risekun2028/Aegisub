@@ -72,6 +72,9 @@ class SubsTextEditCtrl final : public wxTextCtrl {
 	/// @param lang Full list of languages
 	wxMenu *GetLanguagesMenu(int base_id, wxString const& curLang, wxArrayString const& langs);
 
+	/// Toggle Right-to-Left reading order (context menu action)
+	void OnToggleRTL(wxCommandEvent &event);
+
 public:
 	SubsTextEditCtrl(wxWindow* parent, wxSize size, long style, agi::Context *context);
 	~SubsTextEditCtrl();
