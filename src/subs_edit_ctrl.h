@@ -33,9 +33,11 @@
 #include <wx/wx.h>
 #include <wx/stc/stc.h>
 
+#include "include/aegisub/spellchecker.h"
+#include "ass_dialogue.h"
+
 class Thesaurus;
 namespace agi {
-	class SpellChecker;
 	struct Context;
 	namespace ass { struct DialogueToken; }
 }
