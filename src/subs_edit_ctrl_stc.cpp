@@ -182,8 +182,10 @@ SubsStyledTextEditCtrl::SubsStyledTextEditCtrl(wxWindow* parent, wxSize wsize, l
 		SetFocus();
 	}, EDIT_MENU_REMOVE_FROM_DICT);
 
-    // Bind RTL toggle menu command (used by context menu)
-    Bind(wxEVT_MENU, &SubsStyledTextEditCtrl::OnToggleRTL, this, EDIT_MENU_RTL);
+#ifdef __WXMSW__
+	// Bind RTL toggle menu command (used by context menu)
+	Bind(wxEVT_MENU, &SubsStyledTextEditCtrl::OnToggleRTL, this, EDIT_MENU_RTL);
+#endif
 }
 
 SubsStyledTextEditCtrl::~SubsStyledTextEditCtrl() {
@@ -211,12 +213,9 @@ void SubsStyledTextEditCtrl::OnLoseFocus(wxFocusEvent &event) {
 
 void SubsStyledTextEditCtrl::OnKeyDown(wxKeyEvent &event) {
 	if (osx::ime::process_key_event(this, event)) return;
-	event.Skip();
 
-	// Workaround for wxSTC eating tabs.
-	if (event.GetKeyCode() == WXK_TAB)
-		Navigate(event.ShiftDown() ? wxNavigationKeyEvent::IsBackward : wxNavigationKeyEvent::IsForward);
-	else if (event.GetKeyCode() == WXK_RETURN && event.GetModifiers() == wxMOD_SHIFT) {
+	// Handle Shift+Return for soft line breaks (ASS newline)
+	if (event.GetKeyCode() == WXK_RETURN && event.GetModifiers() == wxMOD_SHIFT) {
 		auto sel_start = GetSelectionStart(), sel_end = GetSelectionEnd();
 		wxCharBuffer old = GetTextRaw();
 		std::string data(old.data(), sel_start);
@@ -225,8 +224,18 @@ void SubsStyledTextEditCtrl::OnKeyDown(wxKeyEvent &event) {
 		SetTextRaw(data.c_str());
 
 		SetSelection(sel_start + 2, sel_start + 2);
-		event.Skip(false);
+		return;  // We handled it, don't skip
 	}
+
+	// For TAB, use the default navigation mechanism
+	if (event.GetKeyCode() == WXK_TAB) {
+		Navigate(event.ShiftDown() ? wxNavigationKeyEvent::IsBackward : wxNavigationKeyEvent::IsForward);
+		return;  // We handled it
+	}
+
+	// For all other keys (including Ctrl+Shift combos for RTL toggling on Windows),
+	// let the OS/IME and parent hotkey handler process them
+	event.Skip();
 }
 
 void SubsStyledTextEditCtrl::SetSyntaxStyle(int id, wxFont &font, std::string const& name, wxColor const& default_background) {
@@ -395,6 +404,13 @@ void SubsStyledTextEditCtrl::OnContextMenu(wxContextMenuEvent &event) {
 	else
 		activePos = PositionFromPoint(ScreenToClient(pos));
 
+	// KEY FEATURE: Shift+Right-Click shows native OS context menu on Linux
+	// This gives access to OS-specific features like IME and RTL text display
+	if (wxGetKeyState(WXK_SHIFT)) {
+		event.Skip();  // Show native context menu
+		return;
+	}
+
 	currentWordPos = GetBoundsOfWordAtPosition(activePos);
 	currentWord = line_text.substr(currentWordPos.first, currentWordPos.second);
 
@@ -428,9 +444,11 @@ void SubsStyledTextEditCtrl::OnContextMenu(wxContextMenuEvent &event) {
 		menu.Append(EDIT_MENU_SPLIT_VIDEO, split_video->StrMenu(context))->Enable(split_video->Validate(context));
 	}
 
-	// Add RTL toggle fallback
+	// Add RTL toggle fallback only on Windows; on Linux rely on IME/OS behavior
+#ifdef __WXMSW__
 	menu.AppendSeparator();
 	menu.Append(EDIT_MENU_RTL, _("Right to left Reading order"));
+#endif
 
 	PopupMenu(&menu);
 }
