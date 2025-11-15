@@ -30,28 +30,16 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <wx/wx.h>
-#include <wx/stc/stc.h>
+#include <wx/textctrl.h>
 
-#include "ass_dialogue.h"
-#include <libaegisub/spellchecker.h>
-
-class Thesaurus;
 namespace agi {
 	struct Context;
-	namespace ass { struct DialogueToken; }
 }
 
 /// @class SubsTextEditCtrl
-/// @brief wxStyledTextCtrl-based subtitle editor (Scintilla)
-/// Provides colored syntax highlighting and all STC features
-class SubsTextEditCtrl final : public wxStyledTextCtrl {
-	/// Backend spellchecker to use
-	std::unique_ptr<agi::SpellChecker> spellchecker;
-
-	/// Backend thesaurus to use
-	std::unique_ptr<Thesaurus> thesaurus;
-
+/// @brief Native wxTextCtrl-based subtitle editor
+/// Better platform-specific support: keyboard shortcuts, IME, RTL languages
+class SubsTextEditCtrl final : public wxTextCtrl {
 	/// Project context, for splitting lines
 	agi::Context *context;
 
@@ -67,31 +55,10 @@ class SubsTextEditCtrl final : public wxStyledTextCtrl {
 	/// Thesaurus suggestions for the last right-clicked word
 	std::vector<std::string> thesSugs;
 
-	/// The last seen line text, used to avoid reparsing the line for syntax
-	/// highlighting when possible
-	std::string line_text;
-
-	/// Tokenized line for syntax highlighting
-	std::vector<agi::ass::DialogueToken> tokenized_line;
-
-	/// Current cursor position for call tips
-	long cursor_pos = -1;
-
 	void OnContextMenu(wxContextMenuEvent &);
 	void OnKeyDown(wxKeyEvent &event);
-	void OnDoubleClick(wxStyledTextEvent &evt);
-	void OnSetDicLanguage(wxCommandEvent &event);
-	void OnSetThesLanguage(wxCommandEvent &event);
-    void OnToggleRTL(wxCommandEvent &event);
 
 	void SetStyles();
-	void Subscribe(std::string const& name);
-
-	/// Apply syntax highlighting with colored tags
-	void UpdateStyle();
-
-	/// Update call tips for tag documentation
-	void UpdateCallTip();
 
 	/// Add the thesaurus suggestions to a menu
 	void AddThesaurusEntries(wxMenu &menu);
