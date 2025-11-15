@@ -67,9 +67,6 @@ class SubsTextEditCtrl final : public wxStyledTextCtrl {
 	/// Thesaurus suggestions for the last right-clicked word
 	std::vector<std::string> thesSugs;
 
-	/// Current font size for zoom functionality
-	int zoom_level = 0;
-
 	/// The last seen line text, used to avoid reparsing the line for syntax
 	/// highlighting when possible
 	std::string line_text;
@@ -82,11 +79,12 @@ class SubsTextEditCtrl final : public wxStyledTextCtrl {
 
 	void OnContextMenu(wxContextMenuEvent &);
 	void OnKeyDown(wxKeyEvent &event);
-	void OnMouseWheel(wxMouseEvent &event);
+	void OnDoubleClick(wxStyledTextEvent &evt);
 	void OnSetDicLanguage(wxCommandEvent &event);
 	void OnSetThesLanguage(wxCommandEvent &event);
 
 	void SetStyles();
+	void Subscribe(std::string const& name);
 
 	/// Apply syntax highlighting with colored tags
 	void UpdateStyle();
@@ -105,9 +103,6 @@ class SubsTextEditCtrl final : public wxStyledTextCtrl {
 	/// @param curLang Currently selected language
 	/// @param lang Full list of languages
 	wxMenu *GetLanguagesMenu(int base_id, wxString const& curLang, wxArrayString const& langs);
-
-	/// Update font size based on zoom level
-	void ApplyZoom();
 
 public:
 	SubsTextEditCtrl(wxWindow* parent, wxSize size, long style, agi::Context *context);
