@@ -215,6 +215,13 @@ struct parsed_line {
 
 		AssDialogueBlockPlain *plain = nullptr;
 		AssDialogueBlockOverride *ovr = nullptr;
+
+		// If blockn is out of range (can happen on empty lines), insert at start
+		if (blockn < 0 || blockn >= (int)blocks.size()) {
+			orig_pos = 0;
+			blockn = -1;
+		}
+
 		while (blockn >= 0 && !plain && !ovr) {
 			AssDialogueBlock *block = blocks[blockn].get();
 			switch (block->GetType()) {
@@ -242,6 +249,10 @@ struct parsed_line {
 		std::string insert(tag + value);
 		int shift = insert.size();
 		if (plain || blockn < 0) {
+			// Clamp orig_pos to valid range to avoid substr out-of-range
+			int text_len = (int)line->Text.get().size();
+			if (orig_pos < 0) orig_pos = 0;
+			if (orig_pos > text_len) orig_pos = text_len;
 			line->Text = line->Text.get().substr(0, orig_pos) + "{" + insert + "}" + line->Text.get().substr(orig_pos);
 			shift += 2;
 			blocks = line->ParseTags();
