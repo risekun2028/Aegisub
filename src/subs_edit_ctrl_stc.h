@@ -85,6 +85,7 @@ class SubsStyledTextEditCtrl final : public wxStyledTextCtrl {
 	void OnUseSuggestion(wxCommandEvent &event);
 	void OnSetDicLanguage(wxCommandEvent &event);
 	void OnSetThesLanguage(wxCommandEvent &event);
+	void OnToggleRTL(wxCommandEvent &event);
 	void OnLoseFocus(wxFocusEvent &event);
 	void OnKeyDown(wxKeyEvent &event);
 
