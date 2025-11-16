@@ -37,6 +37,8 @@
 #include "text_selection_controller.h"
 #include "thesaurus.h"
 #include "utils.h"
+#include "format.h"
+#include "ass_dialogue.h"
 
 #include <libaegisub/ass/dialogue_parser.h>
 #include <libaegisub/character_count.h>
@@ -63,9 +65,9 @@ enum {
 	EDIT_MENU_SUGGESTIONS,
 	EDIT_MENU_THESAURUS = (wxID_HIGHEST + 1) + 5000,
 	EDIT_MENU_THESAURUS_SUGS,
-	EDIT_MENU_DIC_LANGUAGE = (wxID_HIGHEST + 1) + 6000,
-	EDIT_MENU_DIC_LANGS,
-	EDIT_MENU_THES_LANGUAGE = EDIT_MENU_DIC_LANGUAGE + LANGS_MAX,
+	EDIT_MENU_SPELL_LANGUAGE = (wxID_HIGHEST + 1) + 6000,
+	EDIT_MENU_SPELL_LANGS,
+	EDIT_MENU_THES_LANGUAGE = EDIT_MENU_SPELL_LANGUAGE + LANGS_MAX,
 	EDIT_MENU_THES_LANGS,
 	EDIT_MENU_RTL = (wxID_HIGHEST + 1) + 7000
 };
@@ -96,7 +98,7 @@ SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, a
 	// Bind RTL toggle so native mode has an explicit toggle
 	Bind(wxEVT_MENU, &SubsTextEditCtrl::OnToggleRTL, this, EDIT_MENU_RTL);
 	// Bind text update for syntax highlighting
-	Bind(wxEVT_TEXT, &SubsTextEditCtrl::UpdateSyntaxHighlight, this);
+	Bind(wxEVT_TEXT, [this](wxCommandEvent&){ UpdateSyntaxHighlight(); });
 	// Bind spell checker suggestion handlers
 	Bind(wxEVT_MENU, bind(&SubsTextEditCtrl::OnUseSuggestion, this, std::placeholders::_1), EDIT_MENU_SUGGESTIONS, EDIT_MENU_SUGGESTIONS+LANGS_MAX);
 	Bind(wxEVT_MENU, &SubsTextEditCtrl::OnAddToDict, this, EDIT_MENU_ADD_TO_DICT);
