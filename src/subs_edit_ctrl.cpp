@@ -161,7 +161,9 @@ void SubsTextEditCtrl::OnContextMenu(wxContextMenuEvent& event) {
 	currentWordPos = GetBoundsOfWordAtPosition(activePos);
 	wxString textValue = GetValue();
 	if (currentWordPos.second > 0 && currentWordPos.first + currentWordPos.second <= (int)textValue.length()) {
-		currentWord = std::string(textValue.utf8_str().data() + currentWordPos.first, currentWordPos.second);
+		// Use wxString::Mid to get the substring by character indices, then convert to UTF-8
+		wxString wxcur = textValue.Mid(currentWordPos.first, currentWordPos.second);
+		currentWord = from_wx(wxcur);
 	} else {
 		currentWord.clear();
 	}
@@ -461,57 +463,69 @@ void SubsTextEditCtrl::UpdateSyntaxHighlight() {
 
 	wxString textValue = GetValue();
 	std::string line_text = std::string(textValue.utf8_str().data());
-	
+
+	// Reset whole control to normal text color first (clears previous styling)
+	wxTextAttr defaultAttr;
+	defaultAttr.SetTextColour(to_wx(OPT_GET("Colour/Subtitle/Syntax/Normal")->GetColor()));
+	SetStyle(0, GetLastPosition(), defaultAttr);
+
 	if (line_text.empty()) return;
 
 	// Tokenize the line for syntax analysis
 	AssDialogue *diag = context ? context->selectionController->GetActiveLine() : nullptr;
 	bool template_line = diag && diag->Comment && (boost::istarts_with(diag->Effect.get(), "template") || boost::istarts_with(diag->Effect.get(), "mixin"));
-	
+
 	auto tokenized_line = agi::ass::TokenizeDialogueBody(line_text, template_line);
 	agi::ass::SplitWords(line_text, tokenized_line);
 
 	// Apply syntax highlighting colors
-	size_t pos = 0;
+	// Note: agi::ass::SyntaxHighlight returns ranges measured in bytes (UTF-8),
+	// but wxTextCtrl::SetStyle expects character indices. Convert byte offsets
+	// to character indices using agi::CharacterCount.
+	size_t byte_pos = 0;
 	for (auto const& style_range : agi::ass::SyntaxHighlight(line_text, tokenized_line, spellchecker.get())) {
+		// Compute byte range
+		size_t start_byte = byte_pos;
+		size_t end_byte = byte_pos + style_range.length;
+
+		// Convert to character indices
+		size_t start_char = agi::CharacterCount(line_text.begin(), line_text.begin() + start_byte, 0);
+		size_t end_char = agi::CharacterCount(line_text.begin(), line_text.begin() + end_byte, 0);
+		size_t char_len = end_char - start_char;
+
 		wxColour color;
-		
+		bool apply = true;
+
 		// Map syntax style types to colors
 		if (style_range.type == agi::ass::SyntaxStyle::TAG) {
-			// Tags color from options
 			color = to_wx(OPT_GET("Colour/Subtitle/Syntax/Tags")->GetColor());
 		}
 		else if (style_range.type == agi::ass::SyntaxStyle::OVERRIDE) {
-			// Brackets color
 			color = to_wx(OPT_GET("Colour/Subtitle/Syntax/Brackets")->GetColor());
 		}
 		else if (style_range.type == agi::ass::SyntaxStyle::PUNCTUATION) {
-			// Slashes color
 			color = to_wx(OPT_GET("Colour/Subtitle/Syntax/Slashes")->GetColor());
 		}
 		else if (style_range.type == agi::ass::SyntaxStyle::PARAMETER) {
-			// Parameters color
 			color = to_wx(OPT_GET("Colour/Subtitle/Syntax/Parameters")->GetColor());
 		}
 		else if (style_range.type == agi::ass::SyntaxStyle::ERROR) {
-			// Error color
 			color = to_wx(OPT_GET("Colour/Subtitle/Syntax/Error")->GetColor());
 		}
 		else if (style_range.type == agi::ass::SyntaxStyle::SPELLING) {
-			// Misspelled words in red
 			color = *wxRED;
 		}
 		else {
-			// Normal text or other styles use default
-			++pos;
-			continue;
+			apply = false;
 		}
 
-		// Apply the text color
-		wxTextAttr attr;
-		attr.SetTextColour(color);
-		SetStyle(pos, pos + style_range.length, attr);
-		pos += style_range.length;
+		if (apply && char_len > 0) {
+			wxTextAttr attr;
+			attr.SetTextColour(color);
+			SetStyle((long)start_char, (long)(start_char + char_len), attr);
+		}
+
+		byte_pos = end_byte;
 	}
 }
 
