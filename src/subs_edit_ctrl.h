@@ -35,6 +35,7 @@
 namespace agi {
 	struct Context;
 	class SpellChecker;
+    namespace ass { struct DialogueToken; }
 }
 class Thesaurus;
 
@@ -62,6 +63,28 @@ class SubsTextEditCtrl final : public wxStyledTextCtrl {
 
 	/// Thesaurus suggestions for the last right-clicked word
 	std::vector<std::string> thesSugs;
+
+	/// Last seen line text for syntax parsing
+	std::string line_text;
+
+	/// Tokenized version of line_text
+	std::vector<agi::ass::DialogueToken> tokenized_line;
+
+	/// Calltip state
+	std::string calltip_text;
+	size_t calltip_position = 0;
+
+	/// Cursor position associated with the current calltip
+	int cursor_pos = -1;
+
+	void OnDoubleClick(wxStyledTextEvent& evt);
+	void OnLoseFocus(wxFocusEvent &event);
+
+	void UpdateCallTip();
+
+	void SetSyntaxStyle(int id, wxFont &font, std::string const& name, wxColor const& default_background);
+
+	void Subscribe(std::string const& name);
 
 	void OnContextMenu(wxContextMenuEvent &);
 	void OnKeyDown(wxKeyEvent &event);
