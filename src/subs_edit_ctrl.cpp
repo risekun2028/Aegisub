@@ -35,6 +35,7 @@
 #include "include/aegisub/context.h"
 #include "include/aegisub/spellchecker.h"
 #include "text_selection_controller.h"
+#include "selection_controller.h"
 #include "thesaurus.h"
 #include "utils.h"
 #include "format.h"
@@ -46,6 +47,7 @@
 #include <libaegisub/spellchecker.h>
 
 #include <boost/algorithm/string/replace.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 
 // Maximum number of languages (locales)
 #define LANGS_MAX 1000
