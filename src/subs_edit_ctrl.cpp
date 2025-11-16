@@ -75,11 +75,20 @@ enum {
 };
 
 SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, agi::Context* context)
-	: wxTextCtrl(parent, wxID_ANY, wxEmptyString, wxDefaultPosition, wsize, style | wxTE_MULTILINE)
+	: wxStyledTextCtrl(parent, wxID_ANY, wxDefaultPosition, wsize, style)
 	, thesaurus(agi::make_unique<Thesaurus>())
 	, spellchecker(SpellCheckerFactory::GetSpellChecker())
 	, context(context)
 {
+	// Inject IME helper on macOS and set basic STC properties
+#ifdef __WXOSX__
+	osx::ime::inject(this);
+#endif
+
+	SetWrapMode(wxSTC_WRAP_WORD);
+	SetMarginWidth(1, 0);
+	UsePopUp(false);
+
 	SetStyles();
 
 	using std::bind;
@@ -99,8 +108,15 @@ SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, a
 	}
 	// Bind RTL toggle so native mode has an explicit toggle
 	Bind(wxEVT_MENU, &SubsTextEditCtrl::OnToggleRTL, this, EDIT_MENU_RTL);
-	// Bind text update for syntax highlighting
-	Bind(wxEVT_TEXT, [this](wxCommandEvent&){ UpdateSyntaxHighlight(); });
+
+	// When STC text changes, update syntax highlight and emit wxEVT_TEXT for compatibility
+	Bind(wxEVT_STC_MODIFIED, [this](wxStyledTextEvent &){
+		UpdateSyntaxHighlight();
+		wxCommandEvent evt(wxEVT_TEXT);
+		evt.SetEventObject(this);
+		GetEventHandler()->ProcessEvent(evt);
+	});
+
 	// Bind spell checker suggestion handlers
 	Bind(wxEVT_MENU, bind(&SubsTextEditCtrl::OnUseSuggestion, this, std::placeholders::_1), EDIT_MENU_SUGGESTIONS, EDIT_MENU_SUGGESTIONS+LANGS_MAX);
 	Bind(wxEVT_MENU, &SubsTextEditCtrl::OnAddToDict, this, EDIT_MENU_ADD_TO_DICT);
@@ -122,10 +138,14 @@ SubsTextEditCtrl::~SubsTextEditCtrl() {
 void SubsTextEditCtrl::OnKeyDown(wxKeyEvent& event) {
 	// Handle Shift+Return for soft line breaks
 	if (event.GetKeyCode() == WXK_RETURN && event.GetModifiers() == wxMOD_SHIFT) {
-		long sel_start, sel_end;
-		GetSelection(&sel_start, &sel_end);
-		wxString data = GetRange(0, sel_start) + to_wx("\\N") + GetRange(sel_end, GetLastPosition());
-		SetValue(data);
+		int sel_start = GetSelectionStart();
+		int sel_end = GetSelectionEnd();
+		wxCharBuffer old = GetTextRaw();
+		std::string data(old.data(), sel_start);
+		data.append(OPT_GET("Subtitle/Edit Box/Soft Line Break")->GetBool() ? "\\n" : "\\N");
+		data.append(old.data() + sel_end, old.length() - sel_end);
+		SetTextRaw(data.c_str());
+
 		SetSelection(sel_start + 2, sel_start + 2);
 		return;  // We handled it, don't skip
 	}
@@ -141,10 +161,34 @@ void SubsTextEditCtrl::SetStyles() {
 	wxString fontname = FontFace("Subtitle/Edit Box");
 	if (!fontname.empty()) font.SetFaceName(fontname);
 	font.SetPointSize(OPT_GET("Subtitle/Edit Box/Font Size")->GetInt());
-	SetFont(font);
 
-	SetBackgroundColour(to_wx(OPT_GET("Colour/Subtitle/Background")->GetColor()));
-	SetForegroundColour(to_wx(OPT_GET("Colour/Subtitle/Syntax/Normal")->GetColor()));
+	auto default_background = to_wx(OPT_GET("Colour/Subtitle/Background")->GetColor());
+
+	// Apply to STC styles
+	namespace ss = agi::ass::SyntaxStyle;
+	// Set font for STC styles
+	for (int id = 0; id <= ss::KARAOKE_VARIABLE; ++id) {
+		StyleSetFont(id, font.GetFaceName());
+		StyleSetForeground(id, to_wx(OPT_GET("Colour/Subtitle/Syntax/Normal")->GetColor()));
+		StyleSetBackground(id, default_background);
+	}
+
+	// Specific style colors
+	StyleSetForeground(ss::TAG, to_wx(OPT_GET("Colour/Subtitle/Syntax/Tags")->GetColor()));
+	StyleSetForeground(ss::OVERRIDE, to_wx(OPT_GET("Colour/Subtitle/Syntax/Brackets")->GetColor()));
+	StyleSetForeground(ss::PUNCTUATION, to_wx(OPT_GET("Colour/Subtitle/Syntax/Slashes")->GetColor()));
+	StyleSetForeground(ss::PARAMETER, to_wx(OPT_GET("Colour/Subtitle/Syntax/Parameters")->GetColor()));
+	StyleSetForeground(ss::ERROR, to_wx(OPT_GET("Colour/Subtitle/Syntax/Error")->GetColor()));
+
+	SetCaretForeground(StyleGetForeground(ss::NORMAL));
+
+	// Misspelling indicator
+	IndicatorSetStyle(0, wxSTC_INDIC_SQUIGGLE);
+	IndicatorSetForeground(0, wxColour(255,0,0));
+
+	// IME pending text indicator
+	IndicatorSetStyle(1, wxSTC_INDIC_PLAIN);
+	IndicatorSetUnder(1, true);
 }
 
 void SubsTextEditCtrl::OnContextMenu(wxContextMenuEvent& event) {
