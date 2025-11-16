@@ -197,7 +197,15 @@ void SubsTextEditCtrl::OnContextMenu(wxContextMenuEvent& event) {
 	menu.AppendSeparator();
 	menu.Append(EDIT_MENU_RTL, _("Right to left Reading order"));
 
-	PopupMenu(&menu);
+	// Use GetPopupMenuSelectionFromUser to get the menu choice directly,
+	// then handle RTL toggle explicitly (more reliable than event routing in PopupMenu)
+	int menuResult = GetPopupMenuSelectionFromUser(menu);
+	if (menuResult == EDIT_MENU_RTL) {
+		wxLayoutDirection cur = GetLayoutDirection();
+		wxLayoutDirection next = (cur == wxLayout_RightToLeft) ? wxLayout_LeftToRight : wxLayout_RightToLeft;
+		SetLayoutDirection(next);
+		Refresh();
+	}
 }
 
 void SubsTextEditCtrl::Paste() {
@@ -488,6 +496,10 @@ void SubsTextEditCtrl::UpdateSyntaxHighlight() {
 		size_t start_byte = byte_pos;
 		size_t end_byte = byte_pos + style_range.length;
 
+		// Clamp to valid range
+		if (start_byte >= line_text.size()) break;
+		end_byte = std::min(end_byte, line_text.size());
+
 		// Convert to character indices
 		size_t start_char = agi::CharacterCount(line_text.begin(), line_text.begin() + start_byte, 0);
 		size_t end_char = agi::CharacterCount(line_text.begin(), line_text.begin() + end_byte, 0);
@@ -496,21 +508,26 @@ void SubsTextEditCtrl::UpdateSyntaxHighlight() {
 		wxColour color;
 		bool apply = true;
 
-		// Map syntax style types to colors
+		// Map syntax style types to colors with defensive fallbacks
 		if (style_range.type == agi::ass::SyntaxStyle::TAG) {
-			color = to_wx(OPT_GET("Colour/Subtitle/Syntax/Tags")->GetColor());
+			auto opt = OPT_GET("Colour/Subtitle/Syntax/Tags");
+			color = opt ? to_wx(opt->GetColor()) : wxColour(200, 200, 200);
 		}
 		else if (style_range.type == agi::ass::SyntaxStyle::OVERRIDE) {
-			color = to_wx(OPT_GET("Colour/Subtitle/Syntax/Brackets")->GetColor());
+			auto opt = OPT_GET("Colour/Subtitle/Syntax/Brackets");
+			color = opt ? to_wx(opt->GetColor()) : wxColour(200, 200, 200);
 		}
 		else if (style_range.type == agi::ass::SyntaxStyle::PUNCTUATION) {
-			color = to_wx(OPT_GET("Colour/Subtitle/Syntax/Slashes")->GetColor());
+			auto opt = OPT_GET("Colour/Subtitle/Syntax/Slashes");
+			color = opt ? to_wx(opt->GetColor()) : wxColour(200, 200, 200);
 		}
 		else if (style_range.type == agi::ass::SyntaxStyle::PARAMETER) {
-			color = to_wx(OPT_GET("Colour/Subtitle/Syntax/Parameters")->GetColor());
+			auto opt = OPT_GET("Colour/Subtitle/Syntax/Parameters");
+			color = opt ? to_wx(opt->GetColor()) : wxColour(200, 200, 200);
 		}
 		else if (style_range.type == agi::ass::SyntaxStyle::ERROR) {
-			color = to_wx(OPT_GET("Colour/Subtitle/Syntax/Error")->GetColor());
+			auto opt = OPT_GET("Colour/Subtitle/Syntax/Error");
+			color = opt ? to_wx(opt->GetColor()) : *wxRED;
 		}
 		else if (style_range.type == agi::ass::SyntaxStyle::SPELLING) {
 			color = *wxRED;
