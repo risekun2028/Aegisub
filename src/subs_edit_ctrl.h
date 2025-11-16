@@ -34,9 +34,9 @@
 
 namespace agi {
 	struct Context;
+	class SpellChecker;
 }
 class Thesaurus;
-class SpellChecker;
 
 /// @class SubsTextEditCtrl
 /// @brief Native wxTextCtrl-based subtitle editor
@@ -46,7 +46,7 @@ class SubsTextEditCtrl final : public wxTextCtrl {
 	std::unique_ptr<Thesaurus> thesaurus;
 
 	/// Backend spell checker to use
-	std::unique_ptr<SpellChecker> spellchecker;
+	std::unique_ptr<agi::SpellChecker> spellchecker;
 
 	/// Project context, for splitting lines
 	agi::Context *context;
