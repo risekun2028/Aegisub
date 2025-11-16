@@ -33,10 +33,15 @@
 #include "compat.h"
 #include "options.h"
 #include "include/aegisub/context.h"
+#include "include/aegisub/spellchecker.h"
 #include "text_selection_controller.h"
+#include "thesaurus.h"
 #include "utils.h"
 
+#include <libaegisub/ass/dialogue_parser.h>
 #include <libaegisub/character_count.h>
+#include <libaegisub/make_unique.h>
+#include <libaegisub/spellchecker.h>
 
 #include <boost/algorithm/string/replace.hpp>
 
@@ -67,6 +72,8 @@ enum {
 
 SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, agi::Context* context)
 	: wxTextCtrl(parent, wxID_ANY, wxEmptyString, wxDefaultPosition, wsize, style | wxTE_MULTILINE)
+	, thesaurus(agi::make_unique<Thesaurus>())
+	, spellchecker(SpellCheckerFactory::GetSpellChecker())
 	, context(context)
 {
 	SetStyles();
@@ -85,9 +92,19 @@ SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, a
 		Bind(wxEVT_MENU, bind(&cmd::call, "edit/line/split/estimate", context), EDIT_MENU_SPLIT_ESTIMATE);
 		Bind(wxEVT_MENU, bind(&cmd::call, "edit/line/split/video", context), EDIT_MENU_SPLIT_VIDEO);
 		Bind(wxEVT_CONTEXT_MENU, &SubsTextEditCtrl::OnContextMenu, this);
-		// Bind RTL toggle (fallback) so native mode has an explicit toggle
-		Bind(wxEVT_MENU, &SubsTextEditCtrl::OnToggleRTL, this, EDIT_MENU_RTL);
 	}
+	// Bind RTL toggle so native mode has an explicit toggle
+	Bind(wxEVT_MENU, &SubsTextEditCtrl::OnToggleRTL, this, EDIT_MENU_RTL);
+	// Bind text update for syntax highlighting
+	Bind(wxEVT_TEXT, &SubsTextEditCtrl::UpdateSyntaxHighlight, this);
+	// Bind spell checker suggestion handlers
+	Bind(wxEVT_MENU, bind(&SubsTextEditCtrl::OnUseSuggestion, this, std::placeholders::_1), EDIT_MENU_SUGGESTIONS, EDIT_MENU_SUGGESTIONS+LANGS_MAX);
+	Bind(wxEVT_MENU, &SubsTextEditCtrl::OnAddToDict, this, EDIT_MENU_ADD_TO_DICT);
+	Bind(wxEVT_MENU, &SubsTextEditCtrl::OnRemoveFromDict, this, EDIT_MENU_REMOVE_FROM_DICT);
+	Bind(wxEVT_MENU, &SubsTextEditCtrl::OnSetSpellLang, this, EDIT_MENU_SPELL_LANGS, EDIT_MENU_SPELL_LANGS+LANGS_MAX);
+	// Bind thesaurus suggestion handlers
+	Bind(wxEVT_MENU, bind(&SubsTextEditCtrl::OnUseSuggestion, this, std::placeholders::_1), EDIT_MENU_THESAURUS_SUGS, EDIT_MENU_THESAURUS_SUGS+LANGS_MAX);
+	Bind(wxEVT_MENU, &SubsTextEditCtrl::OnSetThesLanguage, this, EDIT_MENU_THES_LANGS, EDIT_MENU_THES_LANGS+LANGS_MAX);
 
 	OPT_SUB("Subtitle/Edit Box/Font Face", &SubsTextEditCtrl::SetStyles, this);
 	OPT_SUB("Subtitle/Edit Box/Font Size", &SubsTextEditCtrl::SetStyles, this);
@@ -127,6 +144,24 @@ void SubsTextEditCtrl::SetStyles() {
 }
 
 void SubsTextEditCtrl::OnContextMenu(wxContextMenuEvent& event) {
+	wxPoint pos = event.GetPosition();
+	int activePos;
+	if (pos == wxDefaultPosition)
+		activePos = GetInsertionPoint();
+	else {
+		long from, to;
+		GetSelection(&from, &to);
+		activePos = to;
+	}
+
+	currentWordPos = GetBoundsOfWordAtPosition(activePos);
+	wxString textValue = GetValue();
+	if (currentWordPos.second > 0 && currentWordPos.first + currentWordPos.second <= (int)textValue.length()) {
+		currentWord = std::string(textValue.utf8_str().data() + currentWordPos.first, currentWordPos.second);
+	} else {
+		currentWord.clear();
+	}
+
 	wxMenu menu;
 
 	// Standard actions
@@ -135,6 +170,13 @@ void SubsTextEditCtrl::OnContextMenu(wxContextMenuEvent& event) {
 	menu.Append(EDIT_MENU_PASTE, _("&Paste"))->Enable(CanPaste());
 	menu.AppendSeparator();
 	menu.Append(EDIT_MENU_SELECT_ALL, _("Select &All"));
+
+	// Spell checker
+	if (spellchecker)
+		AddSpellCheckerEntries(menu);
+
+	// Thesaurus
+	AddThesaurusEntries(menu);
 
 	// Split
 	if (context) {
@@ -230,17 +272,245 @@ std::pair<int, int> SubsTextEditCtrl::GetBoundsOfWordAtPosition(int pos) {
 
 // Placeholder implementations for menu items (simplified for wxTextCtrl)
 void SubsTextEditCtrl::AddSpellCheckerEntries(wxMenu &menu) {
-	// Spell checker not implemented for native wxTextCtrl version
+	if (currentWord.empty()) return;
+
+	if (spellchecker->CanRemoveWord(currentWord))
+		menu.Append(EDIT_MENU_REMOVE_FROM_DICT, fmt_tl("Remove \"%s\" from dictionary", currentWord));
+
+	sugs = spellchecker->GetSuggestions(currentWord);
+	if (spellchecker->CheckWord(currentWord)) {
+		// Word is spelled correctly
+		if (sugs.empty())
+			menu.Append(EDIT_MENU_SUGGESTION,_("No spell checker suggestions"))->Enable(false);
+		else {
+			auto subMenu = new wxMenu;
+			for (size_t i = 0; i < sugs.size(); ++i)
+				subMenu->Append(EDIT_MENU_SUGGESTIONS+i, to_wx(sugs[i]));
+
+			menu.Append(-1, fmt_tl("Spell checker suggestions for \"%s\"", currentWord), subMenu);
+		}
+	}
+	else {
+		// Word is misspelled - show suggestions directly
+		if (sugs.empty())
+			menu.Append(EDIT_MENU_SUGGESTION,_("No correction suggestions"))->Enable(false);
+		else {
+			for (size_t i = 0; i < sugs.size(); ++i)
+				menu.Append(EDIT_MENU_SUGGESTIONS+i, to_wx(sugs[i]));
+		}
+
+		// Append "add word" option for misspelled words
+		menu.Append(EDIT_MENU_ADD_TO_DICT, fmt_tl("Add \"%s\" to dictionary", currentWord))->Enable(spellchecker->CanAddWord(currentWord));
+	}
+	menu.Append(-1,_("Spell checker language"), GetLanguagesMenu(
+		EDIT_MENU_SPELL_LANGS,
+		to_wx(OPT_GET("Tool/Spell Checker/Language")->GetString()),
+		to_wx(spellchecker->GetLanguageList())));
+	menu.AppendSeparator();
 }
 
 void SubsTextEditCtrl::AddThesaurusEntries(wxMenu &menu) {
-	// Thesaurus not implemented for native wxTextCtrl version
+	if (currentWord.empty()) return;
+
+	auto results = thesaurus->Lookup(currentWord);
+
+	thesSugs.clear();
+
+	if (results.size()) {
+		auto thesMenu = new wxMenu;
+
+		int curThesEntry = 0;
+		for (auto const& result : results) {
+			// Single word, insert directly
+			if (result.second.empty()) {
+				thesMenu->Append(EDIT_MENU_THESAURUS_SUGS+curThesEntry, to_wx(result.first));
+				thesSugs.push_back(result.first);
+				++curThesEntry;
+			}
+			// Multiple, create submenu
+			else {
+				auto subMenu = new wxMenu;
+				for (auto const& sug : result.second) {
+					subMenu->Append(EDIT_MENU_THESAURUS_SUGS+curThesEntry, to_wx(sug));
+					thesSugs.push_back(sug);
+					++curThesEntry;
+				}
+
+				thesMenu->Append(-1, to_wx(result.first), subMenu);
+			}
+		}
+
+		menu.Append(-1, fmt_tl("Thesaurus suggestions for \"%s\"", currentWord), thesMenu);
+	}
+	else
+		menu.Append(EDIT_MENU_THESAURUS,_("No thesaurus suggestions"))->Enable(false);
+
+	// Append language list
+	menu.Append(-1,_("Thesaurus language"), GetLanguagesMenu(
+		EDIT_MENU_THES_LANGS,
+		to_wx(OPT_GET("Tool/Thesaurus/Language")->GetString()),
+		to_wx(thesaurus->GetLanguageList())));
+	menu.AppendSeparator();
 }
 
 wxMenu *SubsTextEditCtrl::GetLanguagesMenu(int base_id, wxString const& curLang, wxArrayString const& langs) {
-	// Placeholder
-	return nullptr;
+	auto languageMenu = new wxMenu;
+	languageMenu->AppendRadioItem(base_id, _("Disable"))->Check(curLang.empty());
+
+	for (size_t i = 0; i < langs.size(); ++i)
+		languageMenu->AppendRadioItem(base_id + i + 1, LocalizedLanguageName(langs[i]))->Check(langs[i] == curLang);
+
+	return languageMenu;
 }
+
+void SubsTextEditCtrl::OnUseSuggestion(wxCommandEvent &event) {
+	std::string suggestion;
+	int eventId = event.GetId();
+
+	// Check if this is a spell checker suggestion
+	if (eventId >= EDIT_MENU_SUGGESTIONS && eventId < EDIT_MENU_SUGGESTIONS + LANGS_MAX) {
+		int sugIdx = eventId - EDIT_MENU_SUGGESTIONS;
+		if (sugIdx >= 0 && (size_t)sugIdx < sugs.size())
+			suggestion = sugs[sugIdx];
+		else
+			return;
+	}
+	// Or a thesaurus suggestion
+	else if (eventId >= EDIT_MENU_THESAURUS_SUGS && eventId < EDIT_MENU_THESAURUS_SUGS + LANGS_MAX) {
+		int sugIdx = eventId - EDIT_MENU_THESAURUS_SUGS;
+		if (sugIdx >= 0 && (size_t)sugIdx < thesSugs.size())
+			suggestion = thesSugs[sugIdx];
+		else
+			return;
+	}
+	else
+		return;
+
+	size_t pos;
+	while ((pos = suggestion.rfind('(')) != std::string::npos) {
+		// If there's only one suggestion for a word it'll be in the form "(noun) word",
+		// so we need to trim the "(noun) " part
+		if (pos == 0) {
+			pos = suggestion.find(')');
+			if (pos != std::string::npos) {
+				if (pos + 1< suggestion.size() && suggestion[pos + 1] == ' ') ++pos;
+				suggestion.erase(0, pos + 1);
+			}
+			break;
+		}
+
+		// Some replacements have notes about their usage after the word in the
+		// form "word (generic term)" that we need to remove (plus the leading space)
+		suggestion.resize(pos - 1);
+	}
+
+	long sel_start, sel_end;
+	GetSelection(&sel_start, &sel_end);
+	wxString beforeWord = GetRange(0, currentWordPos.first);
+	wxString afterWord = GetRange(currentWordPos.first + currentWordPos.second, GetLastPosition());
+	wxString newValue = beforeWord + to_wx(suggestion) + afterWord;
+
+	SetValue(newValue);
+	SetSelection(currentWordPos.first + suggestion.length(), currentWordPos.first + suggestion.length());
+}
+
+void SubsTextEditCtrl::OnSetThesLanguage(wxCommandEvent &event) {
+	if (!thesaurus) return;
+
+	std::vector<std::string> langs = thesaurus->GetLanguageList();
+
+	int index = event.GetId() - EDIT_MENU_THES_LANGS - 1;
+	std::string lang;
+	if (index >= 0 && (size_t)index < langs.size())
+		lang = langs[index];
+
+	OPT_SET("Tool/Thesaurus/Language")->SetString(lang);
+}
+
+void SubsTextEditCtrl::OnSetSpellLang(wxCommandEvent &event) {
+	if (!spellchecker) return;
+
+	std::vector<std::string> langs = spellchecker->GetLanguageList();
+
+	int index = event.GetId() - EDIT_MENU_SPELL_LANGS - 1;
+	std::string lang;
+	if (index >= 0 && (size_t)index < langs.size())
+		lang = langs[index];
+
+	OPT_SET("Tool/Spell Checker/Language")->SetString(lang);
+}
+
+void SubsTextEditCtrl::OnAddToDict(wxCommandEvent &event) {
+	if (spellchecker)
+		spellchecker->AddWord(currentWord);
+}
+
+void SubsTextEditCtrl::OnRemoveFromDict(wxCommandEvent &event) {
+	if (spellchecker)
+		spellchecker->RemoveWord(currentWord);
+}
+
+void SubsTextEditCtrl::UpdateSyntaxHighlight() {
+	if (!OPT_GET("Subtitle/Highlight/Syntax")->GetBool()) {
+		return;
+	}
+
+	wxString textValue = GetValue();
+	std::string line_text = std::string(textValue.utf8_str().data());
+	
+	if (line_text.empty()) return;
+
+	// Tokenize the line for syntax analysis
+	AssDialogue *diag = context ? context->selectionController->GetActiveLine() : nullptr;
+	bool template_line = diag && diag->Comment && (boost::istarts_with(diag->Effect.get(), "template") || boost::istarts_with(diag->Effect.get(), "mixin"));
+	
+	auto tokenized_line = agi::ass::TokenizeDialogueBody(line_text, template_line);
+	agi::ass::SplitWords(line_text, tokenized_line);
+
+	// Apply syntax highlighting colors
+	size_t pos = 0;
+	for (auto const& style_range : agi::ass::SyntaxHighlight(line_text, tokenized_line, spellchecker.get())) {
+		wxColour color;
+		
+		// Map syntax style types to colors
+		if (style_range.type == agi::ass::SyntaxStyle::TAG) {
+			// Tags color from options
+			color = to_wx(OPT_GET("Colour/Subtitle/Syntax/Tags")->GetColor());
+		}
+		else if (style_range.type == agi::ass::SyntaxStyle::OVERRIDE) {
+			// Brackets color
+			color = to_wx(OPT_GET("Colour/Subtitle/Syntax/Brackets")->GetColor());
+		}
+		else if (style_range.type == agi::ass::SyntaxStyle::PUNCTUATION) {
+			// Slashes color
+			color = to_wx(OPT_GET("Colour/Subtitle/Syntax/Slashes")->GetColor());
+		}
+		else if (style_range.type == agi::ass::SyntaxStyle::PARAMETER) {
+			// Parameters color
+			color = to_wx(OPT_GET("Colour/Subtitle/Syntax/Parameters")->GetColor());
+		}
+		else if (style_range.type == agi::ass::SyntaxStyle::ERROR) {
+			// Error color
+			color = to_wx(OPT_GET("Colour/Subtitle/Syntax/Error")->GetColor());
+		}
+		else if (style_range.type == agi::ass::SyntaxStyle::SPELLING) {
+			// Misspelled words in red
+			color = *wxRED;
+		}
+		else {
+			// Normal text or other styles use default
+			++pos;
+			continue;
+		}
+
+		// Apply the text color
+		wxTextAttr attr;
+		attr.SetTextColour(color);
+		SetStyle(pos, pos + style_range.length, attr);
+		pos += style_range.length;
+	}
+}
+
 
 void SubsTextEditCtrl::OnToggleRTL(wxCommandEvent &event) {
 	wxLayoutDirection cur = GetLayoutDirection();
