@@ -341,7 +341,7 @@ void SubsTextEditCtrl::UpdateCallTip() {
 }
 
 void SubsTextEditCtrl::SetSyntaxStyle(int id, wxFont &font, std::string const& name, wxColor const& default_background) {
-	StyleSetFont(id, font.GetFaceName());
+	StyleSetFont(id, font);
 	StyleSetBold(id, OPT_GET("Colour/Subtitle/Syntax/Bold/" + name)->GetBool());
 	StyleSetForeground(id, to_wx(OPT_GET("Colour/Subtitle/Syntax/" + name)->GetColor()));
 	const agi::OptionValue *background = OPT_GET("Colour/Subtitle/Syntax/Background/" + name);
