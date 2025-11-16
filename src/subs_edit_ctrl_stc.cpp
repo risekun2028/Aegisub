@@ -137,6 +137,8 @@ SubsStyledTextEditCtrl::SubsStyledTextEditCtrl(wxWindow* parent, wxSize wsize, l
 	}
 
 	Bind(wxEVT_CONTEXT_MENU, &SubsStyledTextEditCtrl::OnContextMenu, this);
+	// Bind RTL toggle so STC mode has an explicit toggle
+	Bind(wxEVT_MENU, &SubsStyledTextEditCtrl::OnToggleRTL, this, EDIT_MENU_RTL);
 	Bind(wxEVT_IDLE, std::bind(&SubsStyledTextEditCtrl::UpdateCallTip, this));
 	Bind(wxEVT_STC_DOUBLECLICK, &SubsStyledTextEditCtrl::OnDoubleClick, this);
 	Bind(wxEVT_STC_STYLENEEDED, [=](wxStyledTextEvent&) {
@@ -181,11 +183,6 @@ SubsStyledTextEditCtrl::SubsStyledTextEditCtrl(wxWindow* parent, wxSize wsize, l
 		UpdateStyle();
 		SetFocus();
 	}, EDIT_MENU_REMOVE_FROM_DICT);
-
-#ifdef __WXMSW__
-	// Bind RTL toggle menu command (used by context menu)
-	Bind(wxEVT_MENU, &SubsStyledTextEditCtrl::OnToggleRTL, this, EDIT_MENU_RTL);
-#endif
 }
 
 SubsStyledTextEditCtrl::~SubsStyledTextEditCtrl() {
@@ -437,11 +434,9 @@ void SubsStyledTextEditCtrl::OnContextMenu(wxContextMenuEvent &event) {
 		menu.Append(EDIT_MENU_SPLIT_VIDEO, split_video->StrMenu(context))->Enable(split_video->Validate(context));
 	}
 
-	// Add RTL toggle fallback only on Windows; on Linux rely on IME/OS behavior
-#ifdef __WXMSW__
+	// Add explicit RTL toggle so STC mode always has the option
 	menu.AppendSeparator();
 	menu.Append(EDIT_MENU_RTL, _("Right to left Reading order"));
-#endif
 
 	PopupMenu(&menu);
 }
