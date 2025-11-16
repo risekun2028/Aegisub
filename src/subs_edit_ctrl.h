@@ -30,7 +30,7 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <wx/textctrl.h>
+#include <wx/stc/stc.h>
 
 namespace agi {
 	struct Context;
@@ -41,7 +41,7 @@ class Thesaurus;
 /// @class SubsTextEditCtrl
 /// @brief Native wxTextCtrl-based subtitle editor
 /// Better platform-specific support: keyboard shortcuts, IME, RTL languages
-class SubsTextEditCtrl final : public wxTextCtrl {
+class SubsTextEditCtrl final : public wxStyledTextCtrl {
 	/// Backend thesaurus to use
 	std::unique_ptr<Thesaurus> thesaurus;
 
