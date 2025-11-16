@@ -35,11 +35,19 @@
 namespace agi {
 	struct Context;
 }
+class Thesaurus;
+class SpellChecker;
 
 /// @class SubsTextEditCtrl
 /// @brief Native wxTextCtrl-based subtitle editor
 /// Better platform-specific support: keyboard shortcuts, IME, RTL languages
 class SubsTextEditCtrl final : public wxTextCtrl {
+	/// Backend thesaurus to use
+	std::unique_ptr<Thesaurus> thesaurus;
+
+	/// Backend spell checker to use
+	std::unique_ptr<SpellChecker> spellchecker;
+
 	/// Project context, for splitting lines
 	agi::Context *context;
 
@@ -59,18 +67,34 @@ class SubsTextEditCtrl final : public wxTextCtrl {
 	void OnKeyDown(wxKeyEvent &event);
 
 	void SetStyles();
-
-	/// Add the thesaurus suggestions to a menu
-	void AddThesaurusEntries(wxMenu &menu);
+	void UpdateSyntaxHighlight();
 
 	/// Add the spell checker suggestions to a menu
 	void AddSpellCheckerEntries(wxMenu &menu);
+
+	/// Add the thesaurus suggestions to a menu
+	void AddThesaurusEntries(wxMenu &menu);
 
 	/// Generate a languages submenu from a list of locales and a current language
 	/// @param base_id ID to use for the first menu item
 	/// @param curLang Currently selected language
 	/// @param lang Full list of languages
 	wxMenu *GetLanguagesMenu(int base_id, wxString const& curLang, wxArrayString const& langs);
+
+	/// Handle spell checker or thesaurus suggestion menu item click
+	void OnUseSuggestion(wxCommandEvent &event);
+
+	/// Handle spell checker language selection
+	void OnSetSpellLang(wxCommandEvent &event);
+
+	/// Add word to spell checker dictionary
+	void OnAddToDict(wxCommandEvent &event);
+
+	/// Remove word from spell checker dictionary
+	void OnRemoveFromDict(wxCommandEvent &event);
+
+	/// Handle thesaurus language selection
+	void OnSetThesLanguage(wxCommandEvent &event);
 
 	/// Toggle Right-to-Left reading order (context menu action)
 	void OnToggleRTL(wxCommandEvent &event);
