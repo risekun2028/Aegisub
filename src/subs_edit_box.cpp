@@ -493,29 +493,44 @@ void SubsEditBox::UpdateFrameTiming(agi::vfr::Framerate const& fps) {
 }
 
 void SubsEditBox::OnKeyDown(wxKeyEvent &event) {
-	// Allow IME to handle events first
-	if (!osx::ime::process_key_event(edit_ctrl, event))
+	// Allow IME to handle events first (only for STC)
+#ifdef WITH_WXSTC
+	if (use_stc) {
+		if (!osx::ime::process_key_event(edit_ctrl_stc, event))
+			hotkey::check("Subtitle Edit Box", c, event);
+	}
+	else
 		hotkey::check("Subtitle Edit Box", c, event);
+#else
+	hotkey::check("Subtitle Edit Box", c, event);
+#endif
 
 	// Toggle text layout direction on Ctrl + Shift (matches original fork behavior
 	// of using Ctrl + Right Shift; here we accept either shift key). This switches
 	// between LeftToRight and RightToLeft for the edit control and secondary editor.
 	if (event.GetKeyCode() == WXK_SHIFT && event.ControlDown() && event.ShiftDown()) {
-		// Determine current direction and flip
-		wxLayoutDirection cur = edit_ctrl->GetLayoutDirection();
-		wxLayoutDirection next = (cur == wxLayout_RightToLeft) ? wxLayout_LeftToRight : wxLayout_RightToLeft;
-		edit_ctrl->SetLayoutDirection(next);
-		if (secondary_editor) secondary_editor->SetLayoutDirection(next);
-		// Also, for the styled control, set alignment to match direction
-		if (auto stc = dynamic_cast<wxStyledTextCtrl*>(edit_ctrl)) {
-			if (next == wxLayout_RightToLeft)
-				stc->SetViewEOL(false); // trigger minimal refresh; alignment handled by layout dir
-			else
-				stc->SetViewEOL(false);
+		// Determine active edit control and flip its layout direction
+		wxWindow *active_ctrl = nullptr;
+#ifdef WITH_WXSTC
+		active_ctrl = use_stc ? static_cast<wxWindow*>(edit_ctrl_stc) : static_cast<wxWindow*>(edit_ctrl_tc);
+#else
+		active_ctrl = static_cast<wxWindow*>(edit_ctrl_tc);
+#endif
+
+		if (active_ctrl) {
+			wxLayoutDirection cur = active_ctrl->GetLayoutDirection();
+			wxLayoutDirection next = (cur == wxLayout_RightToLeft) ? wxLayout_LeftToRight : wxLayout_RightToLeft;
+			active_ctrl->SetLayoutDirection(next);
+			if (secondary_editor) secondary_editor->SetLayoutDirection(next);
+
+			if (auto stc = dynamic_cast<wxStyledTextCtrl*>(active_ctrl)) {
+				stc->SetViewEOL(false); // trigger minimal refresh
+			}
+
+			// consume the event
+			event.Skip(false);
+			return;
 		}
-		// consume the event
-		event.Skip(false);
-		return;
 	}
 }
 
