@@ -114,14 +114,6 @@ SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, a
 	// Context menu handler (always bound)
 	Bind(wxEVT_CONTEXT_MENU, &SubsTextEditCtrl::OnContextMenu, this);
 
-	// When STC text changes, update syntax highlight and emit wxEVT_TEXT for compatibility
-	Bind(wxEVT_STC_MODIFIED, [this](wxStyledTextEvent &){
-		UpdateSyntaxHighlight();
-		wxCommandEvent evt(wxEVT_TEXT);
-		evt.SetEventObject(this);
-		GetEventHandler()->ProcessEvent(evt);
-	});
-
 	Bind(wxEVT_STC_DOUBLECLICK, &SubsTextEditCtrl::OnDoubleClick, this);
 
 	Bind(wxEVT_KILL_FOCUS, &SubsTextEditCtrl::OnLoseFocus, this);
@@ -177,6 +169,8 @@ SubsTextEditCtrl::~SubsTextEditCtrl() {
 }
 
 void SubsTextEditCtrl::OnKeyDown(wxKeyEvent& event) {
+	if (osx::ime::process_key_event(this, event)) return;
+
 	// Handle Shift+Return for soft line breaks
 	if (event.GetKeyCode() == WXK_RETURN && event.GetModifiers() == wxMOD_SHIFT) {
 		int sel_start = GetSelectionStart();
@@ -225,9 +219,8 @@ void SubsTextEditCtrl::SetStyles() {
 	SetSyntaxStyle(ss::KARAOKE_TEMPLATE, font, "Karaoke Template", default_background);
 	SetSyntaxStyle(ss::KARAOKE_VARIABLE, font, "Karaoke Variable", default_background);
 
-	StyleSetBackground(wxSTC_STYLE_DEFAULT, default_background);
-
 	SetCaretForeground(StyleGetForeground(ss::NORMAL));
+	StyleSetBackground(wxSTC_STYLE_DEFAULT, default_background);
 
 	// Misspelling indicator
 	IndicatorSetStyle(0, wxSTC_INDIC_SQUIGGLE);
@@ -373,6 +366,7 @@ void SubsTextEditCtrl::Paste() {
 
 void SubsTextEditCtrl::SetTextTo(std::string const& text) {
 	// Mirror STC behaviour: preserve insertion point, update selection controller
+	osx::ime::invalidate(this);
 	SetEvtHandlerEnabled(false);
 	Freeze();
 
@@ -610,15 +604,16 @@ void SubsTextEditCtrl::UpdateSyntaxHighlight() {
 		return;
 	}
 
-	wxCharBuffer raw = GetTextRaw();
-	line_text = raw.data() ? raw.data() : std::string();
-
 	// Tokenize the line for syntax analysis
+	// line_text is already set by wxEVT_STC_STYLENEEDED handler
 	AssDialogue *diag = context ? context->selectionController->GetActiveLine() : nullptr;
 	bool template_line = diag && diag->Comment && (boost::istarts_with(diag->Effect.get(), "template") || boost::istarts_with(diag->Effect.get(), "mixin"));
 
 	tokenized_line = agi::ass::TokenizeDialogueBody(line_text, template_line);
 	agi::ass::SplitWords(line_text, tokenized_line);
+
+	cursor_pos = -1;
+	UpdateCallTip();
 
 #if wxVERSION_NUMBER >= 3100
 	StartStyling(0);
