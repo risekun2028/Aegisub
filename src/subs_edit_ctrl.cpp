@@ -99,29 +99,18 @@ SubsTextEditCtrl::~SubsTextEditCtrl() {
 }
 
 void SubsTextEditCtrl::OnKeyDown(wxKeyEvent& event) {
-	if (osx::ime::process_key_event(this, event)) return;
-
-	// Handle Shift+Return for soft line breaks (ASS newline)
+	// Handle Shift+Return for soft line breaks
 	if (event.GetKeyCode() == WXK_RETURN && event.GetModifiers() == wxMOD_SHIFT) {
-		auto sel_start = GetSelectionStart(), sel_end = GetSelectionEnd();
-		wxCharBuffer old = GetTextRaw();
-		std::string data(old.data(), sel_start);
-		data.append(OPT_GET("Subtitle/Edit Box/Soft Line Break")->GetBool() ? "\\n" : "\\N");
-		data.append(old.data() + sel_end, old.length() - sel_end);
-		SetTextRaw(data.c_str());
-
+		long sel_start, sel_end;
+		GetSelection(&sel_start, &sel_end);
+		wxString data = GetRange(0, sel_start) + to_wx("\\N") + GetRange(sel_end, GetLastPosition());
+		SetValue(data);
 		SetSelection(sel_start + 2, sel_start + 2);
 		return;  // We handled it, don't skip
 	}
 
-	// For TAB, use the default navigation mechanism
-	if (event.GetKeyCode() == WXK_TAB) {
-		Navigate(event.ShiftDown() ? wxNavigationKeyEvent::IsBackward : wxNavigationKeyEvent::IsForward);
-		return;  // We handled it
-	}
-
-	// For all other keys (including Ctrl+Shift combos for RTL toggling on Windows),
-	// let the OS/IME and parent hotkey handler process them
+	// For all other keys, let the native widget and OS handle them
+	// This includes Ctrl+Shift+Right for word selection, etc.
 	event.Skip();
 }
 
