@@ -48,6 +48,7 @@
 #include <libaegisub/calltip_provider.h>
 
 #include <functional>
+#include <cctype>
 
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string/predicate.hpp>
@@ -83,10 +84,7 @@ SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, a
 	, spellchecker(SpellCheckerFactory::GetSpellChecker())
 	, context(context)
 {
-	// Inject IME helper on macOS and set basic STC properties
-#ifdef __WXOSX__
 	osx::ime::inject(this);
-#endif
 
 	SetWrapMode(wxSTC_WRAP_WORD);
 	SetMarginWidth(1, 0);
@@ -124,6 +122,26 @@ SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, a
 			std::string text = GetTextRaw().data();
 			if (text == line_text) return;
 			line_text = move(text);
+		}
+
+		// Auto-detect RTL based on first character
+		if (!line_text.empty()) {
+			// Check if first non-whitespace character is Arabic or Hebrew (RTL scripts)
+			for (unsigned char c : line_text) {
+				if (c > 127) {  // Multi-byte UTF-8 character
+					// Arabic Unicode range: U+0600 to U+06FF, Hebrew: U+0590 to U+05FF
+					// Simple heuristic: if we have high Unicode chars, might be RTL
+					// More detailed: check for Arabic (0xD8-0xDB prefix in UTF-8)
+					if ((unsigned char)c >= 0xD8 && (unsigned char)c <= 0xDB) {
+						// Likely Arabic text
+						if (GetLayoutDirection() != wxLayout_RightToLeft) {
+							SetLayoutDirection(wxLayout_RightToLeft);
+						}
+					}
+					break;
+				}
+				if (!isspace(c)) break;  // Skip whitespace, check first real character
+			}
 		}
 
 		UpdateSyntaxHighlight();
@@ -170,11 +188,13 @@ SubsTextEditCtrl::~SubsTextEditCtrl() {
 
 void SubsTextEditCtrl::OnKeyDown(wxKeyEvent& event) {
 	if (osx::ime::process_key_event(this, event)) return;
+	event.Skip();
 
-	// Handle Shift+Return for soft line breaks
-	if (event.GetKeyCode() == WXK_RETURN && event.GetModifiers() == wxMOD_SHIFT) {
-		int sel_start = GetSelectionStart();
-		int sel_end = GetSelectionEnd();
+	// Workaround for wxSTC eating tabs.
+	if (event.GetKeyCode() == WXK_TAB)
+		Navigate(event.ShiftDown() ? wxNavigationKeyEvent::IsBackward : wxNavigationKeyEvent::IsForward);
+	else if (event.GetKeyCode() == WXK_RETURN && event.GetModifiers() == wxMOD_SHIFT) {
+		auto sel_start = GetSelectionStart(), sel_end = GetSelectionEnd();
 		wxCharBuffer old = GetTextRaw();
 		std::string data(old.data(), sel_start);
 		data.append(OPT_GET("Subtitle/Edit Box/Soft Line Break")->GetBool() ? "\\n" : "\\N");
@@ -182,12 +202,8 @@ void SubsTextEditCtrl::OnKeyDown(wxKeyEvent& event) {
 		SetTextRaw(data.c_str());
 
 		SetSelection(sel_start + 2, sel_start + 2);
-		return;  // We handled it, don't skip
+		event.Skip(false);
 	}
-
-	// For all other keys, let the native widget and OS handle them
-	// This includes Ctrl+Shift+Right for word selection, etc.
-	event.Skip();
 }
 
 void SubsTextEditCtrl::SetStyles() {
