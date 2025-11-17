@@ -170,19 +170,19 @@ void SubsTextEditCtrl::OnContextMenu(wxContextMenuEvent& event) {
 
 	wxMenu menu;
 
-	// Standard actions
-	menu.Append(EDIT_MENU_CUT, _("Cu&t"))->Enable(!GetStringSelection().IsEmpty());
-	menu.Append(EDIT_MENU_COPY, _("&Copy"))->Enable(!GetStringSelection().IsEmpty());
-	menu.Append(EDIT_MENU_PASTE, _("&Paste"))->Enable(CanPaste());
-	menu.AppendSeparator();
-	menu.Append(EDIT_MENU_SELECT_ALL, _("Select &All"));
-
 	// Spell checker
 	if (spellchecker)
 		AddSpellCheckerEntries(menu);
 
 	// Thesaurus
 	AddThesaurusEntries(menu);
+
+	// Standard actions
+	menu.Append(EDIT_MENU_CUT, _("Cu&t"))->Enable(!GetStringSelection().IsEmpty());
+	menu.Append(EDIT_MENU_COPY, _("&Copy"))->Enable(!GetStringSelection().IsEmpty());
+	menu.Append(EDIT_MENU_PASTE, _("&Paste"))->Enable(CanPaste());
+	menu.AppendSeparator();
+	menu.Append(EDIT_MENU_SELECT_ALL, _("Select &All"));
 
 	// Split
 	if (context) {
@@ -197,15 +197,8 @@ void SubsTextEditCtrl::OnContextMenu(wxContextMenuEvent& event) {
 	menu.AppendSeparator();
 	menu.Append(EDIT_MENU_RTL, _("Right to left Reading order"));
 
-	// Use GetPopupMenuSelectionFromUser to get the menu choice directly,
-	// then handle RTL toggle explicitly (more reliable than event routing in PopupMenu)
-	int menuResult = GetPopupMenuSelectionFromUser(menu);
-	if (menuResult == EDIT_MENU_RTL) {
-		wxLayoutDirection cur = GetLayoutDirection();
-		wxLayoutDirection next = (cur == wxLayout_RightToLeft) ? wxLayout_LeftToRight : wxLayout_RightToLeft;
-		SetLayoutDirection(next);
-		Refresh();
-	}
+	// Use PopupMenu to properly route menu events through the event system
+	PopupMenu(&menu);
 }
 
 void SubsTextEditCtrl::Paste() {
